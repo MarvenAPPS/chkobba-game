@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chkobba Online - Multiplayer Card Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="screen screen-active">
+            <div class="loading-content">
+                <h1>Chkobba Online</h1>
+                <div class="spinner"></div>
+                <p>Loading game...</p>
+            </div>
+        </div>
+
+        <!-- Main Menu -->
+        <div id="main-menu" class="screen">
+            <div class="menu-container">
+                <h1>Chkobba Online</h1>
+                <p class="subtitle">Multiplayer Card Game</p>
+                
+                <div class="menu-buttons">
+                    <button class="btn btn-primary" onclick="showCreateRoom()">Create Room</button>
+                    <button class="btn btn-secondary" onclick="showJoinRoom()">Join Room</button>
+                    <button class="btn btn-outline" onclick="showSettings()">Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Room Screen -->
+        <div id="create-room" class="screen">
+            <div class="form-container">
+                <h2>Create Game Room</h2>
+                <form id="create-room-form">
+                    <div class="form-group">
+                        <label for="player-name-create">Your Name</label>
+                        <input type="text" id="player-name-create" placeholder="Enter your name" maxlength="20" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="num-players">Number of Players</label>
+                        <select id="num-players">
+                            <option value="2">2 Players</option>
+                            <option value="3">3 Players</option>
+                            <option value="4">4 Players</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="game-mode">Game Mode</label>
+                        <select id="game-mode">
+                            <option value="1v1_ai">1v1 vs AI</option>
+                            <option value="2p">2 Player (Local)</option>
+                            <option value="3p">3 Players</option>
+                            <option value="4p">4 Players</option>
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">Create Room</button>
+                        <button type="button" class="btn btn-outline" onclick="goBack()">Back</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Join Room Screen -->
+        <div id="join-room" class="screen">
+            <div class="form-container">
+                <h2>Join Game Room</h2>
+                <form id="join-room-form">
+                    <div class="form-group">
+                        <label for="room-code">Room Code</label>
+                        <input type="text" id="room-code" placeholder="e.g., ABC123" maxlength="6" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="player-name-join">Your Name</label>
+                        <input type="text" id="player-name-join" placeholder="Enter your name" maxlength="20" required>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">Join Room</button>
+                        <button type="button" class="btn btn-outline" onclick="goBack()">Back</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Settings Screen -->
+        <div id="settings" class="screen">
+            <div class="settings-container">
+                <h2>Settings</h2>
+                
+                <div class="settings-group">
+                    <h3>Display</h3>
+                    <div class="setting-item">
+                        <label for="card-theme">Card Theme</label>
+                        <select id="card-theme">
+                            <option value="classic">Classic</option>
+                            <option value="modern">Modern</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label for="board-theme">Board Theme</label>
+                        <select id="board-theme">
+                            <option value="classic">Classic</option>
+                            <option value="modern">Modern</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>Audio</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="bg-music" checked>
+                            Background Music
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="sound-effects" checked>
+                            Sound Effects
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="goBack()">Back</button>
+            </div>
+        </div>
+
+        <!-- Game Room Screen -->
+        <div id="game-room" class="screen">
+            <div class="game-header">
+                <div class="room-info">
+                    <h2>Room: <span id="room-code-display"></span></h2>
+                    <p id="game-status">Waiting for players...</p>
+                </div>
+                <button class="btn btn-sm" onclick="leaveRoom()">Leave</button>
+            </div>
+
+            <div class="players-panel">
+                <h3>Players</h3>
+                <div id="players-list" class="players-list"></div>
+            </div>
+
+            <div id="ready-section" class="section">
+                <button class="btn btn-primary btn-lg" onclick="startGame()">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <div class="game-layout">
+                <!-- Game Header -->
+                <div class="game-header">
+                    <div class="header-info">
+                        <div class="player-info">
+                            <h3 id="current-player-name"></h3>
+                            <p id="player-score">Score: 0</p>
+                        </div>
+                        <div class="timer-display">
+                            <div id="timer" class="timer">5</div>
+                            <p>seconds</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm" onclick="leaveGame()">Leave</button>
+                </div>
+
+                <!-- Game Area -->
+                <div class="game-area">
+                    <!-- Table Cards -->
+                    <div class="table-section">
+                        <h4>Table Cards</h4>
+                        <div id="table-cards" class="cards-display"></div>
+                    </div>
+
+                    <!-- Your Hand -->
+                    <div class="hand-section">
+                        <h4>Your Hand</h4>
+                        <div id="player-hand" class="hand-display"></div>
+                    </div>
+
+                    <!-- Action Panel -->
+                    <div class="action-panel">
+                        <div id="action-buttons">
+                            <button class="btn btn-primary" id="play-btn" onclick="playCard()" disabled>Play Card</button>
+                            <button class="btn btn-outline" id="clear-btn" onclick="clearSelection()" disabled>Clear</button>
+                        </div>
+                        <div id="message" class="message"></div>
+                    </div>
+                </div>
+
+                <!-- Scoreboard -->
+                <div class="scoreboard">
+                    <h4>Scores</h4>
+                    <div id="scores-display" class="scores"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over" class="screen">
+            <div class="game-over-container">
+                <h1>Game Over</h1>
+                <div id="winner-info" class="winner-info"></div>
+                <div id="final-scores" class="final-scores"></div>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="goToMainMenu()">Main Menu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket-events.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/timer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>
