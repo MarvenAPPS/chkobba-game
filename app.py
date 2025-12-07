@@ -98,6 +98,20 @@ def create_room():
     active_games[room_id] = GameState(num_players)
     room_players[room_id] = [player_id]
     
+    # Auto-add AI players if it's an AI game mode
+    if 'ai' in game_mode.lower():
+        ai_difficulty = 'medium'  # Default AI difficulty
+        ai_count = num_players - 1  # All other players are AI
+        
+        for i in range(ai_count):
+            ai_name = f"AI-Bot-{i+1}"
+            ai_player_id = db.add_player(room_id, ai_name, is_ai=True, 
+                                         ai_difficulty=ai_difficulty, session_token=None)
+            room_players[room_id].append(ai_player_id)
+        
+        # Mark room as ready to start
+        logger.info(f"Created AI game room {room_code} with {ai_count} AI players")
+    
     logger.info(f"Created room {room_code} (ID: {room_id}) with player {player_name}")
     
     return jsonify({
@@ -105,7 +119,7 @@ def create_room():
         'room_id': room_id,
         'player_id': player_id,
         'session_token': session_token,
-        'status': 'waiting'
+        'status': 'ready' if 'ai' in game_mode.lower() else 'waiting'
     })
 
 
@@ -146,6 +160,22 @@ def join_room_endpoint():
     
     # Get all players in room
     players = db.get_players_by_room(room_id)
+    
+    # Broadcast player joined to all in room via WebSocket
+    socketio.emit('player_update', {
+        'action': 'joined',
+        'player': {
+            'id': player_id,
+            'name': player_name,
+            'is_ai': is_ai
+        },
+        'players': [
+            {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
+            for p in players
+        ],
+        'total_players': len(players),
+        'required_players': room['num_players']
+    }, room=f'room_{room_id}')
     
     logger.info(f"Player {player_name} joined room {room_code}")
     
@@ -289,11 +319,35 @@ def handle_join_game(data):
         'socket_id': request.sid
     }
     
-    # Notify room
-    emit('player_joined', {
-        'player_id': player['id'],
-        'player_name': player['player_name']
-    }, room=f'room_{room_id}')
+    # Get all players in room
+    players = db.get_players_by_room(room_id)
+    room = db.get_room_by_id(room_id)
+    
+    # Send current player list to the joining player
+    emit('player_list', {
+        'players': [
+            {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
+            for p in players
+        ],
+        'total_players': len(players),
+        'required_players': room['num_players']
+    })
+    
+    # Notify others in room about new player
+    emit('player_update', {
+        'action': 'connected',
+        'player': {
+            'id': player['id'],
+            'name': player['player_name'],
+            'is_ai': bool(player['is_ai'])
+        },
+        'players': [
+            {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
+            for p in players
+        ],
+        'total_players': len(players),
+        'required_players': room['num_players']
+    }, room=f'room_{room_id}', include_self=False)
 
 
 @socketio.on('play_card')
@@ -364,27 +418,26 @@ def handle_start_game(data):
     # Check if all players present
     player_count = db.get_player_count(room_id)
     if player_count < room['num_players']:
-        emit('error', {'message': 'Not all players have joined'})
+        emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'})
         return
     
-    # Add AI players if needed
-    if 'ai' in room['game_mode']:
-        players = db.get_players_by_room(room_id)
-        ai_count = room['num_players'] - player_count
-        for i in range(ai_count):
-            db.add_player(room_id, f"AI-Bot-{i+1}", is_ai=True, ai_difficulty='medium')
+    # Get or create game state
+    if room_id not in active_games:
+        active_games[room_id] = GameState(room['num_players'])
     
-    # Create game session
-    db.create_game_session(room_id, game_state.to_dict())
-    db.update_room_status(room_id, 'active')
+    current_game_state = active_games[room_id]
+    
+    # Create game session in database
+    db.create_game_session(room_id, current_game_state.to_dict())
+    db.update_room_status(room_id, 'started')
     
     # Broadcast game start
     emit('game_started', {
-        'game_state': game_state.to_dict(),
-        'first_player': game_state.current_player
+        'game_state': current_game_state.to_dict(),
+        'first_player': current_game_state.current_player
     }, room=f'room_{room_id}')
     
-    logger.info(f"Game started in room {room_id}")
+    logger.info(f"Game started in room {room_id} with {player_count} players")
 
 
 # ========== Error Handlers ==========
