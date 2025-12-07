@@ -108,6 +108,24 @@ class GameState:
         # Deal 4 cards to table
         self.table = self.deck.draw(4)
     
+    def _deal_new_hands(self):
+        """Deal new hands to all players (3 cards each)"""
+        if self.deck.remaining() >= self.num_players * 3:
+            for player_idx in range(self.num_players):
+                self.players[player_idx]['hand'] = self.deck.draw(3)
+            logger.info(f"Dealt new hands. Deck has {self.deck.remaining()} cards remaining")
+            return True
+        return False
+    
+    def _check_and_deal_cards(self):
+        """Check if all players have empty hands and deal new cards"""
+        all_empty = all(len(player['hand']) == 0 for player in self.players)
+        
+        if all_empty and self.deck.remaining() > 0:
+            self._deal_new_hands()
+            return True
+        return False
+    
     def get_legal_moves(self, player_idx: int) -> List[Tuple[Card, List[Card]]]:
         """Get all legal moves for a player
         Returns list of (card_to_play, cards_to_capture) tuples
@@ -148,7 +166,7 @@ class GameState:
         """Play a card and capture specified cards
         
         Returns:
-            Dict with 'success', 'is_chkobba', 'is_haya', 'message'
+            Dict with 'success', 'is_chkobba', 'is_haya', 'message', 'new_cards_dealt'
         """
         if self.current_player != player_idx:
             return {'success': False, 'message': 'Not your turn'}
@@ -167,13 +185,14 @@ class GameState:
         for captured_card in captured_cards:
             self.table.remove(captured_card)
         
-        is_chkobba = len(self.table) == 0
+        is_chkobba = len(self.table) == 0 and len(captured_cards) > 0
         is_haya = Card('7', 'D') in captured_cards
         
         if is_chkobba:
             self.players[player_idx]['chkobba_count'] += 1
-            self.table = [card]  # Played card marks chkobba
-        else:
+        
+        # If no cards captured, add to table
+        if not captured_cards:
             self.table.append(card)
         
         # Record move
@@ -185,10 +204,14 @@ class GameState:
             'is_haya': is_haya
         })
         
+        # Check if we need to deal new cards
+        new_cards_dealt = self._check_and_deal_cards()
+        
         return {
             'success': True,
             'is_chkobba': is_chkobba,
             'is_haya': is_haya,
+            'new_cards_dealt': new_cards_dealt,
             'message': 'Card played successfully'
         }
     
