@@ -82,6 +82,9 @@ function updateScoreboard() {
 }
 
 function updateGameBoard(state) {
+  console.log('Updating game board with state:', state);
+  console.log('Player index:', gameState.player_index);
+  
   // Update table cards
   gameState.table_cards = state.table || [];
   
@@ -94,9 +97,10 @@ function updateGameBoard(state) {
       gameState.scores[idx] = player.score || 0;
       gameState.chkobba_count[idx] = player.chkobba_count || 0;
       
-      // Update player hand if this is the current player
-      if (idx === gameState.player_id) {
+      // Update player hand if this is the current player (use player_index not player_id)
+      if (idx === gameState.player_index || idx === gameState.player_id) {
         gameState.player_hand = player.hand || [];
+        console.log(`Updated hand for player index ${idx}:`, gameState.player_hand);
       }
     });
   }
@@ -115,7 +119,8 @@ function updateGameBoard(state) {
   console.log('Game board updated:', {
     table: gameState.table_cards.length,
     hand: gameState.player_hand.length,
-    deck_remaining: state.deck_remaining
+    deck_remaining: state.deck_remaining,
+    current_player: gameState.current_player
   });
 }
 
@@ -126,15 +131,22 @@ function updateCurrentTurn() {
     el.textContent = `Current: ${currentPlayerName}`;
   }
   
+  // Check if it's our turn (use player_index)
+  const isMyTurn = (gameState.current_player === gameState.player_index) || 
+                   (gameState.current_player === gameState.player_id);
+  
   // Disable play button if not our turn
   const playBtn = document.getElementById('play-btn');
   if (playBtn) {
-    playBtn.disabled = gameState.current_player !== gameState.player_id;
+    playBtn.disabled = !isMyTurn || !gameState.selected_card;
   }
 }
 
 function selectCard(card) {
-  if (gameState.current_player !== gameState.player_id) {
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+                   
+  if (!isMyTurn) {
     showError('Not your turn');
     return;
   }
@@ -151,7 +163,10 @@ function selectCard(card) {
 }
 
 function selectCapturedCard(card) {
-  if (gameState.current_player !== gameState.player_id) {
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+                   
+  if (!isMyTurn) {
     return;
   }
   
@@ -176,8 +191,11 @@ function clearSelection() {
 
 function updatePlayButton() {
   const btn = document.getElementById('play-btn');
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+  
   if (btn) {
-    btn.disabled = !gameState.selected_card || gameState.current_player !== gameState.player_id;
+    btn.disabled = !gameState.selected_card || !isMyTurn;
   }
 }
 
@@ -187,7 +205,10 @@ function playCard() {
     return;
   }
   
-  if (gameState.current_player !== gameState.player_id) {
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+  
+  if (!isMyTurn) {
     showError('Not your turn');
     return;
   }
