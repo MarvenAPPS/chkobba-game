@@ -25,8 +25,11 @@ async function createRoom() {
     gameState.room_code = response.room_code;
     gameState.room_id = response.room_id;
     gameState.player_id = response.player_id;
+    gameState.player_index = response.player_index || 0;  // Store player index
     gameState.session_token = response.session_token;
     gameState.save();
+    
+    console.log('Created room, player_index:', gameState.player_index);
     
     // Join room via WebSocket
     emitJoinGame();
@@ -64,6 +67,7 @@ async function joinRoom() {
     gameState.room_code = roomCode;
     gameState.room_id = response.room_id;
     gameState.player_id = response.player_id;
+    gameState.player_index = response.player_index;  // Store player index
     gameState.session_token = response.session_token;
     gameState.players = response.players.map(p => ({
       id: p.id,
@@ -71,6 +75,8 @@ async function joinRoom() {
       is_ai: p.is_ai
     }));
     gameState.save();
+    
+    console.log('Joined room, player_index:', gameState.player_index);
     
     // Join room via WebSocket
     emitJoinGame();
@@ -157,7 +163,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // ========== Auto-play on Timeout ==========
 
 function autoPlay() {
-  if (gameState.current_player !== gameState.player_id) return;
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+  
+  if (!isMyTurn) return;
   if (!gameState.player_hand.length) return;
   
   // Simple strategy: play first card
@@ -179,6 +188,7 @@ async function reconnectSession() {
     gameState.room_code = response.room_code;
     gameState.room_id = response.room_id;
     gameState.player_id = response.player_id;
+    gameState.player_index = response.player_index;  // Restore player index
     gameState.session_token = token;
     
     if (response.game_state) {
