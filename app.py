@@ -27,8 +27,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # In-memory game sessions
 active_games = {}  # room_id -> GameState
-active_sessions = {}  # session_token -> {room_id, player_id, socket_id}
-room_players = {}  # room_id -> [player_ids]
+active_sessions = {}  # session_token -> {room_id, player_id, socket_id, game_index}
+room_players = {}  # room_id -> [player_ids] (ordered by join)
+player_id_to_index = {}  # room_id -> {player_id: game_index}
 
 
 def generate_room_code(length=6):
@@ -42,6 +43,13 @@ def generate_room_code(length=6):
 def generate_session_token():
     """Generate secure session token"""
     return str(uuid.uuid4())
+
+
+def get_player_game_index(room_id, player_id):
+    """Get player's index in game state array"""
+    if room_id not in player_id_to_index:
+        return None
+    return player_id_to_index[room_id].get(player_id)
 
 
 # ========== HTTP Routes ==========
@@ -97,6 +105,7 @@ def create_room():
     # Initialize game state
     active_games[room_id] = GameState(num_players)
     room_players[room_id] = [player_id]
+    player_id_to_index[room_id] = {player_id: 0}  # First player is index 0
     
     # Auto-add AI players if it's an AI game mode
     if 'ai' in game_mode.lower():
@@ -108,8 +117,8 @@ def create_room():
             ai_player_id = db.add_player(room_id, ai_name, is_ai=True, 
                                          ai_difficulty=ai_difficulty, session_token=None)
             room_players[room_id].append(ai_player_id)
+            player_id_to_index[room_id][ai_player_id] = i + 1  # Subsequent indices
         
-        # Mark room as ready to start
         logger.info(f"Created AI game room {room_code} with {ai_count} AI players")
     
     logger.info(f"Created room {room_code} (ID: {room_id}) with player {player_name}")
@@ -118,6 +127,7 @@ def create_room():
         'room_code': room_code,
         'room_id': room_id,
         'player_id': player_id,
+        'player_index': 0,  # Return game index
         'session_token': session_token,
         'status': 'ready' if 'ai' in game_mode.lower() else 'waiting'
     })
@@ -156,7 +166,12 @@ def join_room_endpoint():
     
     if room_id not in room_players:
         room_players[room_id] = []
+    if room_id not in player_id_to_index:
+        player_id_to_index[room_id] = {}
+    
+    game_index = len(room_players[room_id])
     room_players[room_id].append(player_id)
+    player_id_to_index[room_id][player_id] = game_index
     
     # Get all players in room
     players = db.get_players_by_room(room_id)
@@ -177,11 +192,12 @@ def join_room_endpoint():
         'required_players': room['num_players']
     }, room=f'room_{room_id}')
     
-    logger.info(f"Player {player_name} joined room {room_code}")
+    logger.info(f"Player {player_name} joined room {room_code} at index {game_index}")
     
     return jsonify({
         'room_id': room_id,
         'player_id': player_id,
+        'player_index': game_index,
         'session_token': session_token,
         'players': [
             {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
@@ -235,6 +251,7 @@ def reconnect():
     
     room_id = player['room_id']
     room = db.get_room_by_id(room_id)
+    player_index = get_player_game_index(room_id, player['id'])
     
     db.update_player_status(player['id'], 'connected')
     
@@ -244,6 +261,7 @@ def reconnect():
         'room_code': room['room_code'],
         'room_id': room_id,
         'player_id': player['id'],
+        'player_index': player_index,
         'game_state': active_games.get(room_id).to_dict() if room_id in active_games else None,
         'status': 'reconnected'
     })
@@ -311,17 +329,28 @@ def handle_join_game(data):
         return
     
     room_id = player['room_id']
+    player_index = get_player_game_index(room_id, player['id'])
+    
     join_room(f'room_{room_id}')
     
     active_sessions[session_token] = {
         'room_id': room_id,
         'player_id': player['id'],
+        'game_index': player_index,
         'socket_id': request.sid
     }
     
     # Get all players in room
     players = db.get_players_by_room(room_id)
     room = db.get_room_by_id(room_id)
+    
+    # Send current game state if game started
+    game_state = active_games.get(room_id)
+    if game_state:
+        emit('game_state_update', {
+            'game_state': game_state.to_dict(),
+            'your_index': player_index
+        })
     
     # Send current player list to the joining player
     emit('player_list', {
@@ -363,7 +392,7 @@ def handle_play_card(data):
         return
     
     room_id = session_info['room_id']
-    player_id = session_info['player_id']
+    player_index = session_info['game_index']  # Use game index, not DB player_id
     
     game_state = active_games.get(room_id)
     if not game_state:
@@ -378,26 +407,31 @@ def handle_play_card(data):
         emit('error', {'message': f'Invalid card: {str(e)}'})
         return
     
-    # Play card
-    result = game_state.play_card(player_id, card, captured)
+    # Play card using game index
+    result = game_state.play_card(player_index, card, captured)
     
     if result['success']:
-        game_state.next_turn()
-        
         # Update database
-        db.record_move(room_id, game_state.round_number, player_id, 
+        db.record_move(room_id, game_state.round_number, session_info['player_id'], 
                       card_code, captured_codes, result['is_chkobba'], result['is_haya'])
         
-        # Broadcast to room
-        emit('card_played', {
-            'player_id': player_id,
+        # Move to next turn
+        game_state.next_turn()
+        
+        # Broadcast to room with full game state
+        socketio.emit('card_played', {
+            'player_id': session_info['player_id'],
+            'player_index': player_index,
             'card': card_code,
             'captured': captured_codes,
             'is_chkobba': result['is_chkobba'],
             'is_haya': result['is_haya'],
+            'new_cards_dealt': result.get('new_cards_dealt', False),
             'next_turn_player': game_state.current_player,
             'game_state': game_state.to_dict()
         }, room=f'room_{room_id}')
+        
+        logger.info(f"Card played by player_index {player_index}, new cards dealt: {result.get('new_cards_dealt', False)}")
     else:
         emit('error', {'message': result['message']})
 
@@ -418,7 +452,7 @@ def handle_start_game(data):
     # Check if all players present
     player_count = db.get_player_count(room_id)
     if player_count < room['num_players']:
-        emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'})
+        emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'}) 
         return
     
     # Get or create game state
@@ -431,10 +465,11 @@ def handle_start_game(data):
     db.create_game_session(room_id, current_game_state.to_dict())
     db.update_room_status(room_id, 'started')
     
-    # Broadcast game start
-    emit('game_started', {
+    # Broadcast game start with player indices
+    socketio.emit('game_started', {
         'game_state': current_game_state.to_dict(),
-        'first_player': current_game_state.current_player
+        'first_player': current_game_state.current_player,
+        'player_mapping': player_id_to_index.get(room_id, {})
     }, room=f'room_{room_id}')
     
     logger.info(f"Game started in room {room_id} with {player_count} players")
