@@ -33,6 +33,12 @@ function renderPlayerHand() {
   if (!container) return;
   
   container.innerHTML = '';
+  
+  if (!gameState.player_hand || gameState.player_hand.length === 0) {
+    container.innerHTML = '<p class="no-cards">No cards in hand</p>';
+    return;
+  }
+  
   gameState.player_hand.forEach(card => {
     const isSelected = gameState.selected_card === card || gameState.captured_cards.includes(card);
     container.appendChild(renderCard(card, true, isSelected));
@@ -76,12 +82,41 @@ function updateScoreboard() {
 }
 
 function updateGameBoard(state) {
+  // Update table cards
   gameState.table_cards = state.table || [];
-  gameState.scores = state.scores || {};
-  gameState.chkobba_count = state.chkobba_count || {};
   
+  // Update scores
+  gameState.scores = {};
+  gameState.chkobba_count = {};
+  
+  if (state.players && Array.isArray(state.players)) {
+    state.players.forEach((player, idx) => {
+      gameState.scores[idx] = player.score || 0;
+      gameState.chkobba_count[idx] = player.chkobba_count || 0;
+      
+      // Update player hand if this is the current player
+      if (idx === gameState.player_id) {
+        gameState.player_hand = player.hand || [];
+      }
+    });
+  }
+  
+  // Update current player
+  if (state.current_player !== undefined) {
+    gameState.current_player = state.current_player;
+  }
+  
+  // Re-render all UI components
   renderTableCards();
+  renderPlayerHand();
   updateScoreboard();
+  updateCurrentTurn();
+  
+  console.log('Game board updated:', {
+    table: gameState.table_cards.length,
+    hand: gameState.player_hand.length,
+    deck_remaining: state.deck_remaining
+  });
 }
 
 function updateCurrentTurn() {
