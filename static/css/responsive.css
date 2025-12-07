@@ -1,0 +1,451 @@
+/* ========== Mobile First (Base) ========== */
+
+@media (max-width: 768px) {
+  :root {
+    --font-size-base: 14px;
+  }
+  
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .menu-container,
+  .form-container,
+  .settings-container,
+  .game-over-container {
+    max-width: 95%;
+    width: 95%;
+    padding: 1.5rem;
+  }
+  
+  .menu-buttons {
+    flex-direction: column;
+  }
+  
+  .button-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .btn {
+    flex: 1;
+    width: 100%;
+  }
+  
+  .game-area {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+  
+  .table-section {
+    grid-column: 1;
+    min-height: 120px;
+  }
+  
+  .hand-section {
+    grid-column: 1;
+    min-height: 100px;
+  }
+  
+  .action-panel {
+    grid-column: 1;
+  }
+  
+  .scoreboard {
+    order: -1;
+  }
+  
+  .card {
+    width: 60px;
+    height: 90px;
+    font-size: 14px;
+  }
+  
+  .timer {
+    font-size: 2rem;
+  }
+  
+  #action-buttons {
+    flex-direction: column;
+  }
+  
+  .players-list {
+    flex-direction: column;
+  }
+}
+
+/* ========== iPhone 15 Pro (393px × 852px) - Portrait ========== */
+
+@media (max-width: 414px) {
+  body {
+    font-size: 13px;
+  }
+  
+  .menu-container h1,
+  .form-container h2 {
+    font-size: 1.8rem;
+  }
+  
+  .subtitle {
+    font-size: 0.95rem;
+  }
+  
+  .card {
+    width: 50px;
+    height: 75px;
+    font-size: 12px;
+    gap: 0.25rem;
+  }
+  
+  .cards-display {
+    gap: 0.35rem;
+  }
+  
+  .hand-display {
+    gap: 0.35rem;
+  }
+  
+  .timer-display {
+    padding: 0.5rem;
+  }
+  
+  .timer {
+    font-size: 1.8rem;
+  }
+  
+  .timer-display p {
+    font-size: 0.8rem;
+  }
+  
+  .game-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  
+  .room-info h2 {
+    font-size: 1.2rem;
+  }
+  
+  .room-info p {
+    font-size: 0.85rem;
+  }
+  
+  .players-panel h3,
+  .scoreboard h4 {
+    font-size: 1rem;
+  }
+  
+  .player-item {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  .score-item {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  .score-value {
+    font-size: 1rem;
+  }
+  
+  /* Increase touch target size for better mobile UX */
+  .btn {
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+  }
+  
+  .form-group input,
+  .form-group select {
+    padding: 0.75rem;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* ========== iPhone 15 Pro - Landscape (852px × 393px) ========== */
+
+@media (max-width: 852px) and (orientation: landscape) {
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    grid-template-rows: auto 1fr;
+  }
+  
+  .game-header {
+    grid-column: 1 / -1;
+  }
+  
+  .game-area {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    padding: 0.5rem;
+  }
+  
+  .table-section,
+  .hand-section,
+  .action-panel {
+    grid-column: 1;
+  }
+  
+  .scoreboard {
+    grid-column: 2;
+    grid-row: 2;
+    border-top: none;
+    border-left: 2px solid var(--color-border);
+    padding: 1rem;
+    overflow-y: auto;
+  }
+  
+  .table-section {
+    min-height: auto;
+    padding: 0.5rem;
+  }
+  
+  .cards-display {
+    gap: 0.25rem;
+  }
+  
+  .card {
+    width: 50px;
+    height: 75px;
+    font-size: 11px;
+  }
+  
+  .hand-section {
+    min-height: auto;
+  }
+  
+  .hand-display {
+    gap: 0.25rem;
+  }
+  
+  .action-panel {
+    padding: 0.5rem;
+  }
+  
+  #action-buttons {
+    gap: 0.25rem;
+  }
+  
+  .btn {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    min-height: 40px;
+  }
+  
+  .timer {
+    font-size: 1.5rem;
+  }
+}
+
+/* ========== Tablet - Portrait (768px - 1024px) ========== */
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .menu-container,
+  .form-container,
+  .settings-container,
+  .game-over-container {
+    max-width: 600px;
+  }
+  
+  .game-area {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .table-section {
+    grid-column: 1 / -1;
+  }
+  
+  .card {
+    width: 80px;
+    height: 120px;
+    font-size: 18px;
+  }
+}
+
+/* ========== Tablet - Landscape (1024px+) ========== */
+
+@media (min-width: 1025px) {
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    grid-template-rows: auto 1fr auto;
+  }
+  
+  .game-header {
+    grid-column: 1 / -1;
+  }
+  
+  .game-area {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  
+  .table-section {
+    flex: 0 0 auto;
+  }
+  
+  .hand-section {
+    flex: 1 1 auto;
+  }
+  
+  .action-panel {
+    flex: 0 0 auto;
+  }
+  
+  .scoreboard {
+    grid-column: 2;
+    grid-row: 2;
+    border-left: 2px solid var(--color-border);
+    border-top: none;
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+  
+  .card {
+    width: 100px;
+    height: 150px;
+    font-size: 22px;
+  }
+  
+  .cards-display,
+  .hand-display {
+    gap: 1rem;
+  }
+  
+  #action-buttons {
+    flex-direction: row;
+  }
+  
+  .btn {
+    min-height: 44px;
+  }
+  
+  .timer {
+    font-size: 3rem;
+  }
+}
+
+/* ========== Desktop (1440px+) ========== */
+
+@media (min-width: 1440px) {
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    grid-template-rows: auto 1fr;
+  }
+  
+  .card {
+    width: 120px;
+    height: 180px;
+    font-size: 24px;
+  }
+  
+  .cards-display,
+  .hand-display {
+    gap: 1.5rem;
+  }
+  
+  .scoreboard {
+    padding: 2rem;
+  }
+}
+
+/* ========== Print Styles ========== */
+
+@media print {
+  * {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  .screen {
+    display: none !important;
+  }
+}
+
+/* ========== High DPI / Retina Screens ========== */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .card {
+    border-width: 3px;
+  }
+  
+  .btn {
+    border-width: 2px;
+  }
+}
+
+/* ========== Dark Mode Support ========== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121212;
+    --color-surface: #1e1e1e;
+    --color-text: #E0E0E0;
+    --color-text-secondary: #B0B0B0;
+    --color-border: #424242;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+  }
+  
+  .btn-outline {
+    border-color: #90CAF9;
+    color: #90CAF9;
+  }
+  
+  .btn-outline:hover {
+    background-color: rgba(144, 202, 249, 0.1);
+  }
+  
+  .form-group input,
+  .form-group select {
+    background-color: #2e2e2e;
+    color: #E0E0E0;
+    border-color: #424242;
+  }
+  
+  .form-group input:focus,
+  .form-group select:focus {
+    border-color: #90CAF9;
+  }
+  
+  .player-item {
+    background: #2e2e2e;
+  }
+  
+  .score-item {
+    background: #2e2e2e;
+  }
+  
+  .hand-section,
+  .action-panel {
+    background: #2e2e2e;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  * {
+    backdrop-filter: none !important;
+  }
+}
