@@ -12,15 +12,13 @@ class Database:
     
     def __init__(self, db_path=None):
         self.db_path = db_path or Config.DATABASE_PATH
-        self.conn = None
         self.ensure_db_exists()
     
     def get_connection(self):
-        """Get database connection"""
-        if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path)
-            self.conn.row_factory = sqlite3.Row
-        return self.conn
+        """Get database connection - creates new connection per call for thread safety"""
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
     
     def ensure_db_exists(self):
         """Create database and tables if they don't exist"""
@@ -112,13 +110,8 @@ class Database:
             """)
         
         conn.commit()
+        conn.close()
         logger.info(f"Database initialized at {self.db_path}")
-    
-    def close(self):
-        """Close database connection"""
-        if self.conn:
-            self.conn.close()
-            self.conn = None
     
     # ========== Room Operations ==========
     
@@ -131,21 +124,27 @@ class Database:
             VALUES (?, ?, ?, ?)
         """, (room_code, created_by, game_mode, num_players))
         conn.commit()
-        return cursor.lastrowid
+        room_id = cursor.lastrowid
+        conn.close()
+        return room_id
     
     def get_room_by_code(self, room_code):
         """Get room by room code"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_rooms WHERE room_code = ?", (room_code,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        conn.close()
+        return result
     
     def get_room_by_id(self, room_id):
         """Get room by ID"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_rooms WHERE id = ?", (room_id,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        conn.close()
+        return result
     
     def update_room_status(self, room_id, status):
         """Update room status"""
@@ -160,6 +159,7 @@ class Database:
         else:
             cursor.execute("UPDATE game_rooms SET status = ? WHERE id = ?", (status, room_id))
         conn.commit()
+        conn.close()
     
     # ========== Player Operations ==========
     
@@ -172,28 +172,36 @@ class Database:
             VALUES (?, ?, ?, ?, ?)
         """, (room_id, player_name, is_ai, ai_difficulty, session_token))
         conn.commit()
-        return cursor.lastrowid
+        player_id = cursor.lastrowid
+        conn.close()
+        return player_id
     
     def get_players_by_room(self, room_id):
         """Get all players in a room"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_players WHERE room_id = ?", (room_id,))
-        return cursor.fetchall()
+        result = cursor.fetchall()
+        conn.close()
+        return result
     
     def get_player_by_token(self, session_token):
         """Get player by session token"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_players WHERE session_token = ?", (session_token,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        conn.close()
+        return result
     
     def get_player_count(self, room_id):
         """Get number of players in room"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM game_players WHERE room_id = ?", (room_id,))
-        return cursor.fetchone()[0]
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
     
     def update_player_status(self, player_id, status):
         """Update player status"""
@@ -202,6 +210,7 @@ class Database:
         cursor.execute("UPDATE game_players SET status = ?, last_seen = ? WHERE id = ?",
                      (status, datetime.utcnow().isoformat(), player_id))
         conn.commit()
+        conn.close()
     
     # ========== Game Session Operations ==========
     
@@ -215,14 +224,18 @@ class Database:
             VALUES (?, ?, ?, ?, ?)
         """, (room_id, json.dumps(initial_state), '{}', '{}', datetime.utcnow().isoformat()))
         conn.commit()
-        return cursor.lastrowid
+        session_id = cursor.lastrowid
+        conn.close()
+        return session_id
     
     def get_game_session(self, room_id):
         """Get game session for room"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_sessions WHERE room_id = ?", (room_id,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        conn.close()
+        return result
     
     def update_game_state(self, room_id, game_state, scores, chkobba_count, current_turn_player_id):
         """Update game state"""
@@ -233,6 +246,7 @@ class Database:
             WHERE room_id = ?
         """, (json.dumps(game_state), json.dumps(scores), json.dumps(chkobba_count), current_turn_player_id, room_id))
         conn.commit()
+        conn.close()
     
     # ========== Move Recording ==========
     
@@ -245,6 +259,7 @@ class Database:
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (room_id, round_num, player_id, card_played, json.dumps(cards_captured), is_chkobba, is_haya))
         conn.commit()
+        conn.close()
     
     # ========== Settings Operations ==========
     
@@ -253,7 +268,9 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM game_settings WHERE id = 1")
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        conn.close()
+        return result
     
     def update_settings(self, card_theme=None, board_theme=None, bg_music=None, sound_effects=None):
         """Update game settings"""
@@ -270,6 +287,7 @@ class Database:
             cursor.execute("UPDATE game_settings SET sound_effects_enabled = ? WHERE id = 1", (sound_effects,))
         
         conn.commit()
+        conn.close()
 
 # Global database instance
 db = Database()
