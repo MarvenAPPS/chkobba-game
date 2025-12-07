@@ -33,6 +33,26 @@ socket.on('player_joined', (data) => {
   showInfo(`${data.player_name} joined the room`);
 });
 
+socket.on('player_update', (data) => {
+  console.log('Player update:', data);
+  if (data.players) {
+    gameState.players = data.players;
+  }
+  updatePlayersList();
+  
+  if (data.action === 'joined') {
+    showInfo(`${data.player.name} joined the room`);
+  }
+});
+
+socket.on('player_list', (data) => {
+  console.log('Player list received:', data);
+  if (data.players) {
+    gameState.players = data.players;
+    updatePlayersList();
+  }
+});
+
 socket.on('room_full', (data) => {
   showError('Room is full');
 });
@@ -42,17 +62,38 @@ socket.on('room_full', (data) => {
 socket.on('game_started', (data) => {
   console.log('Game started:', data);
   gameState.game_status = 'active';
+  
+  // Update player index from mapping if provided
+  if (data.player_mapping && gameState.player_id) {
+    gameState.player_index = data.player_mapping[gameState.player_id];
+  }
+  
   gameState.save();
   showScreen('game-screen');
   updateGameBoard(data.game_state);
   showInfo('Game started!');
 });
 
+socket.on('game_state_update', (data) => {
+  console.log('Game state update:', data);
+  if (data.your_index !== undefined) {
+    gameState.player_index = data.your_index;
+  }
+  if (data.game_state) {
+    updateGameBoard(data.game_state);
+  }
+});
+
 socket.on('card_played', (data) => {
   console.log('Card played:', data);
   audioManager.play('card_play');
   
+  // Update game board with new state
   updateGameBoard(data.game_state);
+  
+  if (data.new_cards_dealt) {
+    showInfo('🃏 New cards dealt!');
+  }
   
   if (data.is_chkobba) {
     audioManager.play('chkobba');
@@ -65,6 +106,7 @@ socket.on('card_played', (data) => {
   }
   
   gameState.current_player = data.next_turn_player;
+  gameState.save();
   updateCurrentTurn();
 });
 
@@ -89,7 +131,7 @@ socket.on('timeout_warning', (data) => {
 
 socket.on('auto_played', (data) => {
   console.log('Auto-played:', data);
-  showInfo(`${data.player_id} auto-played due to timeout`);
+  showInfo(`Player ${data.player_id} auto-played due to timeout`);
 });
 
 socket.on('round_ended', (data) => {
