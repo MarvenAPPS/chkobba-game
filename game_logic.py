@@ -172,6 +172,17 @@ class GameState:
                 return True
         return False
     
+    def _has_non_capturing_card(self, player_idx: int) -> bool:
+        """Check if player has at least one card that cannot capture anything"""
+        hand = self.players[player_idx]['hand']
+        
+        for card in hand:
+            captures = self._find_captures(card)
+            if not captures:  # This card cannot capture anything
+                return True
+        
+        return False  # All cards can capture
+    
     def play_card(self, player_idx: int, card: Card, captured_cards: List[Card]) -> Dict:
         """Play a card and capture specified cards
         
@@ -191,7 +202,7 @@ class GameState:
             return {'success': False, 'message': 'Card not in hand'}
         
         # Validate capture
-        is_valid, msg = self._validate_capture(card, captured_cards)
+        is_valid, msg = self._validate_capture(card, captured_cards, player_idx)
         if not is_valid:
             logger.error(f"Capture validation failed: {msg}")
             return {'success': False, 'message': msg}
@@ -237,23 +248,41 @@ class GameState:
             'message': 'Card played successfully'
         }
     
-    def _validate_capture(self, card: Card, captured_cards: List[Card]) -> Tuple[bool, str]:
+    def _validate_capture(self, card: Card, captured_cards: List[Card], player_idx: int) -> Tuple[bool, str]:
         """Validate card capture according to Chkobba rules
         
         Rules:
-        1. Players can skip captures (no mandatory capture)
-        2. If a 1-to-1 match exists, combo captures are NOT allowed
-        3. Captured cards must sum to card value
+        1. If ALL cards in hand can capture, capture is MANDATORY
+        2. If player has at least one card that cannot capture, capture is OPTIONAL
+        3. If a 1-to-1 match exists, combo captures are NOT allowed
+        4. Captured cards must sum to card value
         """
         card_value = card.value
         
         logger.info(f"Validating capture: card={card.code} (value={card_value}), captured={[c.code for c in captured_cards]}")
         
-        # No captures is always valid (players can skip captures)
-        if not captured_cards:
-            logger.info("No captures - valid (skipping capture)")
-            return True, ''
+        # Check if this card can capture
+        possible_captures = self._find_captures(card)
         
+        # If no captures and attempting to skip
+        if not captured_cards:
+            # Check if card can capture
+            if possible_captures:
+                # Card CAN capture - check if player can skip
+                has_skip_option = self._has_non_capturing_card(player_idx)
+                
+                if not has_skip_option:
+                    logger.error(f"Cannot skip capture - all cards in hand can capture")
+                    return False, 'You must capture! All your cards can capture, so skipping is not allowed.'
+                else:
+                    logger.info("Skipping capture allowed - player has non-capturing cards")
+                    return True, ''
+            else:
+                # Card cannot capture - valid skip
+                logger.info("No captures possible - valid play")
+                return True, ''
+        
+        # Player is attempting to capture
         # Check if 1-to-1 match exists
         has_single_match = self._has_single_card_match(card)
         
@@ -279,7 +308,6 @@ class GameState:
             return False, f'Captured cards sum ({total_value}) does not match card value ({card_value})'
         
         # Verify this is a valid capture combination
-        possible_captures = self._find_captures(card)
         captured_codes = [c.code for c in captured_cards]
         is_valid_combo = any(
             sorted([c.code for c in combo]) == sorted(captured_codes)
