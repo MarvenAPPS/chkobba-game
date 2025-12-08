@@ -12,7 +12,6 @@ function renderCard(card, clickable = false, selected = false) {
   
   if (clickable) {
     div.style.cursor = 'pointer';
-    div.addEventListener('click', () => selectCard(card));
   }
   
   return div;
@@ -23,8 +22,19 @@ function renderTableCards() {
   if (!container) return;
   
   container.innerHTML = '';
+  
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+  
   gameState.table_cards.forEach(card => {
-    container.appendChild(renderCard(card, false, false));
+    const isSelected = gameState.captured_cards.includes(card);
+    const cardEl = renderCard(card, isMyTurn, isSelected);
+    
+    if (isMyTurn) {
+      cardEl.addEventListener('click', () => toggleCapturedCard(card));
+    }
+    
+    container.appendChild(cardEl);
   });
 }
 
@@ -40,8 +50,10 @@ function renderPlayerHand() {
   }
   
   gameState.player_hand.forEach(card => {
-    const isSelected = gameState.selected_card === card || gameState.captured_cards.includes(card);
-    container.appendChild(renderCard(card, true, isSelected));
+    const isSelected = gameState.selected_card === card;
+    const cardEl = renderCard(card, true, isSelected);
+    cardEl.addEventListener('click', () => selectCard(card));
+    container.appendChild(cardEl);
   });
 }
 
@@ -75,7 +87,7 @@ function updateScoreboard() {
     div.className = `score-item ${isCurrent ? 'current' : ''}`;
     div.innerHTML = `
       <div class="score-name">${player.name}</div>
-      <div class="score-value">${score}</div>
+      <div class="score-value">${score} <small>(Chk: ${chkobba})</small></div>
     `;
     container.appendChild(div);
   });
@@ -116,6 +128,15 @@ function updateGameBoard(state) {
   updateScoreboard();
   updateCurrentTurn();
   
+  // Start timer if it's our turn
+  const isMyTurn = (gameState.current_player === gameState.player_index) ||
+                   (gameState.current_player === gameState.player_id);
+  if (isMyTurn && gameState.player_hand.length > 0) {
+    timerManager.start();
+  } else {
+    timerManager.stop();
+  }
+  
   console.log('Game board updated:', {
     table: gameState.table_cards.length,
     hand: gameState.player_hand.length,
@@ -134,6 +155,18 @@ function updateCurrentTurn() {
   // Check if it's our turn (use player_index)
   const isMyTurn = (gameState.current_player === gameState.player_index) || 
                    (gameState.current_player === gameState.player_id);
+  
+  // Update UI based on turn
+  const gameContainer = document.getElementById('game-container');
+  if (gameContainer) {
+    if (isMyTurn) {
+      gameContainer.classList.add('my-turn');
+      gameContainer.classList.remove('opponent-turn');
+    } else {
+      gameContainer.classList.add('opponent-turn');
+      gameContainer.classList.remove('my-turn');
+    }
+  }
   
   // Disable play button if not our turn
   const playBtn = document.getElementById('play-btn');
@@ -162,7 +195,7 @@ function selectCard(card) {
   updatePlayButton();
 }
 
-function selectCapturedCard(card) {
+function toggleCapturedCard(card) {
   const isMyTurn = (gameState.current_player === gameState.player_index) ||
                    (gameState.current_player === gameState.player_id);
                    
@@ -196,6 +229,11 @@ function updatePlayButton() {
   
   if (btn) {
     btn.disabled = !gameState.selected_card || !isMyTurn;
+    if (gameState.selected_card) {
+      btn.textContent = gameState.captured_cards.length > 0 ? 'Play & Capture' : 'Play Card';
+    } else {
+      btn.textContent = 'Select a Card';
+    }
   }
 }
 
@@ -213,8 +251,35 @@ function playCard() {
     return;
   }
   
+  // Stop timer
+  timerManager.stop();
+  
+  // Animate card play
+  animateCardPlay(gameState.selected_card, gameState.captured_cards);
+  
+  // Send to server
   emitPlayCard(gameState.selected_card, gameState.captured_cards);
-  clearSelection();
+  
+  // Clear selection after short delay
+  setTimeout(() => {
+    clearSelection();
+  }, 300);
+}
+
+function animateCardPlay(playedCard, capturedCards) {
+  // Add playing animation class
+  const playedCardEl = document.querySelector(`[data-card="${playedCard}"]`);
+  if (playedCardEl) {
+    playedCardEl.classList.add('card-playing');
+  }
+  
+  // Add captured animation to captured cards
+  capturedCards.forEach(card => {
+    const cardEl = document.querySelector(`#table-cards [data-card="${card}"]`);
+    if (cardEl) {
+      cardEl.classList.add('card-captured');
+    }
+  });
 }
 
 function showGameOver(data) {
