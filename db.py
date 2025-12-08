@@ -185,6 +185,15 @@ class Database:
         conn.close()
         return result
     
+    def get_player_by_id(self, player_id):
+        """Get player by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM game_players WHERE id = ?", (player_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result
+    
     def get_player_by_token(self, session_token):
         """Get player by session token"""
         conn = self.get_connection()
