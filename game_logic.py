@@ -229,15 +229,33 @@ class GameState:
         }
     
     def _validate_capture(self, card: Card, captured_cards: List[Card]) -> Tuple[bool, str]:
-        """Validate card capture according to rules"""
+        """Validate card capture according to Chkobba rules
+        
+        MANDATORY CAPTURE RULE: If a capture is possible, player MUST capture.
+        Player can only add card to table if no captures are available.
+        """
         card_value = card.value
         
         logger.info(f"Validating capture: card={card.code} (value={card_value}), captured={[c.code for c in captured_cards]}")
         
-        # No captures is valid
+        # Find all possible captures for this card
+        possible_captures = self._find_captures(card)
+        
+        logger.info(f"Possible captures for {card.code}: {[[c.code for c in combo] for combo in possible_captures]}")
+        
+        # RULE: If captures are possible, player MUST capture
+        if possible_captures and not captured_cards:
+            logger.error(f"Capture is mandatory! Possible captures: {[[c.code for c in combo] for combo in possible_captures]}")
+            return False, f'You must capture when possible. Available captures: {[[c.code for c in combo] for combo in possible_captures[:3]]}'
+        
+        # No captures attempted - only valid if no captures possible
         if not captured_cards:
-            logger.info("No captures - valid")
-            return True, ''
+            if not possible_captures:
+                logger.info("No captures possible - valid to add to table")
+                return True, ''
+            else:
+                # This should never happen due to check above, but keeping for safety
+                return False, 'Capture is mandatory when possible'
         
         # Convert table to codes for comparison
         table_codes = [c.code for c in self.table]
@@ -254,6 +272,17 @@ class GameState:
         
         if total_value != card_value:
             return False, f'Captured cards sum ({total_value}) does not match card value ({card_value})'
+        
+        # Verify this is a valid capture combination
+        captured_codes = [c.code for c in captured_cards]
+        is_valid_combo = any(
+            sorted([c.code for c in combo]) == sorted(captured_codes)
+            for combo in possible_captures
+        )
+        
+        if not is_valid_combo:
+            logger.error(f"Invalid capture combination. Attempted: {captured_codes}, Valid: {[[c.code for c in combo] for combo in possible_captures]}")
+            return False, 'Invalid capture combination'
         
         logger.info("Capture validation successful")
         return True, ''
