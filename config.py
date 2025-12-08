@@ -22,7 +22,7 @@ class Config:
     DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'instance', 'chkobba.db')
     
     # Game Settings
-    DEFAULT_TIMEOUT_SECONDS = 5
+    DEFAULT_TIMEOUT_SECONDS = 10
     WINNING_SCORE = 21
     MAX_PLAYERS_PER_ROOM = 4
     MIN_PLAYERS_PER_ROOM = 2
