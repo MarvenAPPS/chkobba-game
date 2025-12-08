@@ -164,6 +164,9 @@
                     <div class="header-info">
                         <div class="player-info">
                             <h3 id="current-player-name"></h3>
+                            <div class="game-stats">
+                                <span id="turns-remaining" class="stat-badge">Turns: --</span>
+                            </div>
                         </div>
                         
                         <!-- Timer Progress Bar -->
@@ -171,10 +174,25 @@
                             <div class="timer-bar">
                                 <div id="timer-progress" class="timer-progress"></div>
                             </div>
-                            <span id="timer-display" class="timer-text">30s</span>
+                            <span id="timer-display" class="timer-text">10s</span>
                         </div>
                     </div>
                     <button class="btn btn-sm" onclick="leaveGame()">Leave</button>
+                </div>
+
+                <!-- Deck Display (Top Right Corner) -->
+                <div id="deck-display" class="deck-display">
+                    <div class="deck-visual">
+                        <div class="deck-cards">
+                            <div class="deck-card deck-card-1"></div>
+                            <div class="deck-card deck-card-2"></div>
+                            <div class="deck-card deck-card-3"></div>
+                        </div>
+                        <div class="deck-info">
+                            <span class="deck-count" id="deck-count">40</span>
+                            <span class="deck-label">cards</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Game Area -->
@@ -205,6 +223,25 @@
                 <div class="scoreboard">
                     <h4>Scores</h4>
                     <div id="scores-display" class="scores"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Round Summary Modal -->
+        <div id="round-summary-modal" class="modal" style="display: none;">
+            <div class="modal-overlay" onclick="closeRoundSummary()"></div>
+            <div class="modal-content round-summary">
+                <div class="modal-header">
+                    <h2>🎴 Round Complete!</h2>
+                    <button class="modal-close" onclick="closeRoundSummary()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="round-summary-content">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="closeRoundSummary()">Continue</button>
                 </div>
             </div>
         </div>

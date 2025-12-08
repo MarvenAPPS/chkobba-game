@@ -1,0 +1,375 @@
+/**
+ * Deck Display and Round Summary Modal Styles
+ */
+
+/* ========== Deck Display ========== */
+.deck-display {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  z-index: 100;
+}
+
+.deck-visual {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 2px solid #3498db;
+}
+
+.deck-cards {
+  position: relative;
+  width: 50px;
+  height: 70px;
+}
+
+.deck-card {
+  position: absolute;
+  width: 45px;
+  height: 65px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.deck-card-1 {
+  left: 0;
+  top: 0;
+  transform: rotate(-5deg);
+  z-index: 1;
+}
+
+.deck-card-2 {
+  left: 3px;
+  top: 2px;
+  transform: rotate(0deg);
+  z-index: 2;
+}
+
+.deck-card-3 {
+  left: 6px;
+  top: 4px;
+  transform: rotate(5deg);
+  z-index: 3;
+}
+
+.deck-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.deck-count {
+  font-size: 28px;
+  font-weight: bold;
+  color: #2c3e50;
+  line-height: 1;
+}
+
+.deck-label {
+  font-size: 12px;
+  color: #7f8c8d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Deck empty state */
+.deck-display.empty .deck-card {
+  opacity: 0.3;
+  background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+}
+
+.deck-display.empty .deck-count {
+  color: #e74c3c;
+}
+
+/* Deck animation when cards are dealt */
+@keyframes deckDeal {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.deck-display.dealing {
+  animation: deckDeal 0.4s ease;
+}
+
+/* ========== Game Stats ========== */
+.game-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.stat-badge {
+  background: rgba(52, 152, 219, 0.1);
+  color: #2c3e50;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(52, 152, 219, 0.3);
+}
+
+.stat-badge.warning {
+  background: rgba(243, 156, 18, 0.1);
+  color: #f39c12;
+  border-color: rgba(243, 156, 18, 0.3);
+}
+
+.stat-badge.critical {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.3);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* ========== Modal ========== */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content {
+  position: relative;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: slideUp 0.4s ease;
+  z-index: 1001;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 24px;
+  border-bottom: 1px solid #ecf0f1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 32px;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-body {
+  padding: 24px;
+  max-height: calc(80vh - 160px);
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #ecf0f1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* ========== Round Summary ========== */
+.round-summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.summary-header {
+  text-align: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.summary-header h3 {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+}
+
+.summary-header p {
+  margin: 0;
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.player-summary {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  border-left: 4px solid #3498db;
+}
+
+.player-summary.winner {
+  border-left-color: #f39c12;
+  background: linear-gradient(90deg, rgba(243, 156, 18, 0.1) 0%, #f8f9fa 100%);
+}
+
+.player-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.player-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.player-name .trophy {
+  color: #f39c12;
+  margin-left: 8px;
+}
+
+.player-round-score {
+  font-size: 24px;
+  font-weight: bold;
+  color: #3498db;
+}
+
+.score-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.score-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: white;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.score-item-label {
+  color: #7f8c8d;
+}
+
+.score-item-value {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.score-item.highlight {
+  background: #e8f5e9;
+  border: 1px solid #4caf50;
+}
+
+.score-item.highlight .score-item-value {
+  color: #4caf50;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+  .deck-display {
+    top: 60px;
+    right: 10px;
+    transform: scale(0.85);
+  }
+
+  .modal-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .score-details {
+    grid-template-columns: 1fr;
+  }
+
+  .game-stats {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .stat-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
