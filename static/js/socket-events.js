@@ -72,6 +72,12 @@ socket.on('game_started', (data) => {
   showScreen('game-screen');
   updateGameBoard(data.game_state);
   showInfo('Game started!');
+  
+  // Play turn sound if it's our turn
+  const isMyTurn = data.game_state.current_player === gameState.player_index;
+  if (isMyTurn) {
+    audioManager.play('turn');
+  }
 });
 
 socket.on('game_state_update', (data) => {
@@ -92,7 +98,7 @@ socket.on('card_played', (data) => {
   updateGameBoard(data.game_state);
   
   if (data.new_cards_dealt) {
-    showInfo('🃏 New cards dealt!');
+    showInfo('🎴 New cards dealt!');
   }
   
   if (data.is_chkobba) {
@@ -105,9 +111,19 @@ socket.on('card_played', (data) => {
     showSuccess('🏆 Haya! 7 of Diamonds captured!');
   }
   
+  // Store previous player to detect turn change
+  const previousPlayer = gameState.current_player;
   gameState.current_player = data.next_turn_player;
   gameState.save();
   updateCurrentTurn();
+  
+  // Play turn sound if it's now our turn (and wasn't before)
+  const isNowMyTurn = gameState.current_player === gameState.player_index;
+  const wasMyTurn = previousPlayer === gameState.player_index;
+  if (isNowMyTurn && !wasMyTurn) {
+    audioManager.play('turn');
+    showInfo('🔔 Your turn!');
+  }
 });
 
 socket.on('hand_updated', (data) => {
@@ -118,9 +134,21 @@ socket.on('hand_updated', (data) => {
 
 socket.on('turn_changed', (data) => {
   console.log('Turn changed:', data);
+  const previousPlayer = gameState.current_player;
   gameState.current_player = data.current_player_id;
   updateCurrentTurn();
-  startTimer(data.timer_start);
+  
+  // Play turn sound if it's now our turn
+  const isNowMyTurn = gameState.current_player === gameState.player_index;
+  const wasMyTurn = previousPlayer === gameState.player_index;
+  if (isNowMyTurn && !wasMyTurn) {
+    audioManager.play('turn');
+    showInfo('🔔 Your turn!');
+  }
+  
+  if (data.timer_start) {
+    startTimer(data.timer_start);
+  }
 });
 
 socket.on('timeout_warning', (data) => {
@@ -136,15 +164,32 @@ socket.on('auto_played', (data) => {
 
 socket.on('round_ended', (data) => {
   console.log('Round ended:', data);
+  
+  // PAUSE GAME - stop timer and disable interactions
+  timerManager.stop();
+  const playBtn = document.getElementById('play-btn');
+  if (playBtn) playBtn.disabled = true;
+  
+  // Update scores
   gameState.scores = data.scores;
   gameState.chkobba_count = data.chkobba_count;
   updateScoreboard();
-  showInfo('Round ended!');
+  
+  // Show round summary with detailed scoring
+  if (data.round_scores) {
+    showRoundSummary(data.round_scores, data.scoring_details);
+  } else {
+    showInfo('🏁 Round ended!');
+  }
 });
 
 socket.on('game_ended', (data) => {
   console.log('Game ended:', data);
+  
+  // PAUSE GAME completely
+  timerManager.stop();
   gameState.game_status = 'finished';
+  
   showGameOver(data);
 });
 
@@ -189,4 +234,36 @@ function emitStartGame() {
   socket.emit('start_game', {
     session_token: gameState.session_token
   });
+}
+
+// ========== Round Summary Display ==========
+
+function showRoundSummary(roundScores, scoringDetails) {
+  let summaryHtml = '<div class="round-summary"><h3>🏆 Round Complete!</h3>';
+  
+  // Show each player's round performance
+  gameState.players.forEach((player, idx) => {
+    const score = roundScores[idx] || 0;
+    const details = scoringDetails?.[idx] || {};
+    
+    summaryHtml += `
+      <div class="player-round-score">
+        <strong>${player.name}:</strong> ${score} points
+        <ul class="scoring-breakdown">
+    `;
+    
+    if (details.most_cards) summaryHtml += '<li>✅ Most Cards (1pt)</li>';
+    if (details.most_diamonds) summaryHtml += '<li>✅ Most Diamonds (1pt)</li>';
+    if (details.haya) summaryHtml += '<li>✅ 7 of Diamonds - Haya (1pt)</li>';
+    if (details.dinari) summaryHtml += '<li>✅ 7 of Clubs - Dinari (1pt)</li>';
+    if (details.chkobba_count > 0) {
+      summaryHtml += `<li>✅ ${details.chkobba_count} Chkobba (${details.chkobba_count}pt)</li>`;
+    }
+    
+    summaryHtml += '</ul></div>';
+  });
+  
+  summaryHtml += '</div>';
+  
+  showInfo(summaryHtml, 5000); // Show for 5 seconds
 }
