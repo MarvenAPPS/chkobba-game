@@ -89,13 +89,23 @@ class GameState:
         
         self.num_players = num_players
         self.deck = Deck()
-        self.players = [{'hand': [], 'score': 0, 'chkobba_count': 0} for _ in range(num_players)]
+        self.players = [
+            {
+                'hand': [],
+                'score': 0,
+                'chkobba_count': 0,
+                'captured_cards': [],  # Track captured cards for scoring
+                'round_captures': []    # Cards captured this round
+            }
+            for _ in range(num_players)
+        ]
         self.table = []
         self.current_player = 0
         self.round_number = 1
         self.move_history = []
         self.is_finished = False
         self.winner = None
+        self.last_capturer = None  # Track who made last capture for remaining table cards
         
         self._setup_game()
     
@@ -125,6 +135,10 @@ class GameState:
         if all_empty and self.deck.remaining() > 0:
             self._deal_new_hands()
             return True
+        elif all_empty and self.deck.remaining() == 0:
+            # Round is over - calculate scores
+            self.end_round()
+            return False
         return False
     
     def get_legal_moves(self, player_idx: int) -> List[Tuple[Card, List[Card]]]:
@@ -209,8 +223,15 @@ class GameState:
         
         # Execute play
         hand.remove(card)
-        for captured_card in captured_cards:
-            self.table.remove(captured_card)
+        
+        # Add captured cards to player's collection
+        if captured_cards:
+            self.players[player_idx]['captured_cards'].extend(captured_cards)
+            self.players[player_idx]['round_captures'].extend(captured_cards)
+            self.last_capturer = player_idx  # Track last capturer
+            
+            for captured_card in captured_cards:
+                self.table.remove(captured_card)
         
         is_chkobba = len(self.table) == 0 and len(captured_cards) > 0
         is_haya = any(c.rank == '7' and c.suit == 'D' for c in captured_cards)
@@ -323,11 +344,18 @@ class GameState:
     
     def end_round(self) -> Dict:
         """Calculate scores for current round"""
+        # Give remaining table cards to last capturer
+        if self.table and self.last_capturer is not None:
+            logger.info(f"Giving {len(self.table)} remaining table cards to player {self.last_capturer}")
+            self.players[self.last_capturer]['captured_cards'].extend(self.table)
+            self.players[self.last_capturer]['round_captures'].extend(self.table)
+            self.table = []
+        
         scores = self._calculate_round_scores()
         
-        # Check if any player won
-        for idx, score in enumerate(scores.items()):
-            self.players[idx]['score'] += score[1]
+        # Add round scores to player totals
+        for idx, round_score in scores.items():
+            self.players[idx]['score'] += round_score
             if self.players[idx]['score'] >= Config.WINNING_SCORE:
                 self.is_finished = True
                 self.winner = idx
@@ -338,19 +366,68 @@ class GameState:
             self.table = []
             for player in self.players:
                 player['hand'] = []
+                player['round_captures'] = []
+                player['chkobba_count'] = 0
             self._setup_game()
         
         return scores
     
     def _calculate_round_scores(self) -> Dict[int, int]:
-        """Calculate scores for current round based on Chkobba rules"""
+        """Calculate scores for current round based on Chkobba rules
+        
+        Scoring criteria:
+        1. Most Cards (27+ out of 40): 1 point
+        2. Most Diamonds: 1 point
+        3. 7 of Diamonds (Haya): 1 point
+        4. 7 of Clubs (Dinari): 1 point
+        5. Each Chkobba: 1 point
+        """
         round_scores = {i: 0 for i in range(self.num_players)}
         
-        # TODO: Implement full scoring based on specification
-        # For MVP, just award points for chkobba
-        for idx, player in enumerate(self.players):
-            round_scores[idx] = player['chkobba_count']
+        # Count cards and diamonds for each player
+        card_counts = {}
+        diamond_counts = {}
         
+        for idx, player in enumerate(self.players):
+            card_counts[idx] = len(player['round_captures'])
+            diamond_counts[idx] = sum(1 for c in player['round_captures'] if c.suit == 'D')
+        
+        # 1. Most Cards (27+ for 2 players, need majority for more players)
+        max_cards = max(card_counts.values())
+        winners = [idx for idx, count in card_counts.items() if count == max_cards]
+        if len(winners) == 1 and card_counts[winners[0]] >= 21:  # No tie
+            round_scores[winners[0]] += 1
+            logger.info(f"Player {winners[0]} gets 1 point for most cards ({card_counts[winners[0]]})")
+        
+        # 2. Most Diamonds
+        max_diamonds = max(diamond_counts.values())
+        winners = [idx for idx, count in diamond_counts.items() if count == max_diamonds]
+        if len(winners) == 1 and diamond_counts[winners[0]] > 0:  # No tie
+            round_scores[winners[0]] += 1
+            logger.info(f"Player {winners[0]} gets 1 point for most diamonds ({diamond_counts[winners[0]]})")
+        
+        # 3. 7 of Diamonds (Haya)
+        haya = Card('7', 'D')
+        for idx, player in enumerate(self.players):
+            if haya in player['round_captures']:
+                round_scores[idx] += 1
+                logger.info(f"Player {idx} gets 1 point for 7 of Diamonds (Haya)")
+        
+        # 4. 7 of Clubs (Dinari)
+        dinari = Card('7', 'C')
+        for idx, player in enumerate(self.players):
+            if dinari in player['round_captures']:
+                round_scores[idx] += 1
+                logger.info(f"Player {idx} gets 1 point for 7 of Clubs (Dinari)")
+        
+        # 5. Chkobbas
+        for idx, player in enumerate(self.players):
+            chkobba_points = player['chkobba_count']
+            round_scores[idx] += chkobba_points
+            if chkobba_points > 0:
+                logger.info(f"Player {idx} gets {chkobba_points} points for {chkobba_points} Chkobba(s)")
+        
+        logger.info(f"Round {self.round_number} scores: {round_scores}")
         return round_scores
     
     def next_turn(self):
@@ -369,7 +446,8 @@ class GameState:
                 {
                     'hand': [c.code for c in p['hand']],
                     'score': p['score'],
-                    'chkobba_count': p['chkobba_count']
+                    'chkobba_count': p['chkobba_count'],
+                    'captured_count': len(p['round_captures'])
                 }
                 for p in self.players
             ],
