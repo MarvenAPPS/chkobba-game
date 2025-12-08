@@ -1,6 +1,8 @@
 import os
 import uuid
 import json
+import time
+import threading
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -23,13 +25,15 @@ app.config.from_object(config.get(os.environ.get('FLASK_ENV', 'development')))
 app.config['SECRET_KEY'] = app.config['SECRET_KEY']
 
 # Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # In-memory game sessions
 active_games = {}  # room_id -> GameState
 active_sessions = {}  # session_token -> {room_id, player_id, socket_id, game_index}
 room_players = {}  # room_id -> [player_ids] (ordered by join)
 player_id_to_index = {}  # room_id -> {player_id: game_index}
+ai_players = {}  # room_id -> {player_index: AIPlayer}
+turn_timers = {}  # room_id -> timer_thread
 
 
 def generate_room_code(length=6):
@@ -50,6 +54,174 @@ def get_player_game_index(room_id, player_id):
     if room_id not in player_id_to_index:
         return None
     return player_id_to_index[room_id].get(player_id)
+
+
+def is_ai_player(room_id, player_index):
+    """Check if player at index is AI"""
+    if room_id not in room_players or player_index >= len(room_players[room_id]):
+        return False
+    
+    player_id = room_players[room_id][player_index]
+    player = db.get_player_by_id(player_id)
+    return bool(player and player['is_ai'])
+
+
+def trigger_ai_turn(room_id):
+    """Trigger AI player to make a move"""
+    def ai_move():
+        time.sleep(0.5)  # 500ms think time
+        
+        game_state = active_games.get(room_id)
+        if not game_state:
+            return
+        
+        current_player_idx = game_state.current_player
+        
+        # Check if current player is AI
+        if not is_ai_player(room_id, current_player_idx):
+            return
+        
+        # Get AI player instance
+        if room_id not in ai_players or current_player_idx not in ai_players[room_id]:
+            logger.error(f"AI player not found for room {room_id} index {current_player_idx}")
+            return
+        
+        ai = ai_players[room_id][current_player_idx]
+        
+        # Choose move
+        try:
+            card, captured = ai.choose_move(game_state, current_player_idx)
+            
+            if card is None:
+                logger.error(f"AI could not find valid move")
+                return
+            
+            # Play the card
+            result = game_state.play_card(current_player_idx, card, captured)
+            
+            if result['success']:
+                # Get player_id for database
+                player_id = room_players[room_id][current_player_idx]
+                
+                # Update database
+                db.record_move(room_id, game_state.round_number, player_id,
+                              card.code, [c.code for c in captured], 
+                              result['is_chkobba'], result['is_haya'])
+                
+                # Move to next turn
+                game_state.next_turn()
+                
+                # Broadcast to room
+                socketio.emit('card_played', {
+                    'player_id': player_id,
+                    'player_index': current_player_idx,
+                    'card': card.code,
+                    'captured': [c.code for c in captured],
+                    'is_chkobba': result['is_chkobba'],
+                    'is_haya': result['is_haya'],
+                    'new_cards_dealt': result.get('new_cards_dealt', False),
+                    'next_turn_player': game_state.current_player,
+                    'game_state': game_state.to_dict()
+                }, room=f'room_{room_id}')
+                
+                logger.info(f"AI player {current_player_idx} played {card.code}")
+                
+                # Process next turn (might be another AI)
+                process_next_turn(room_id)
+            else:
+                logger.error(f"AI move failed: {result['message']}")
+        
+        except Exception as e:
+            logger.error(f"AI move error: {str(e)}", exc_info=True)
+    
+    # Run AI move in background thread
+    threading.Thread(target=ai_move, daemon=True).start()
+
+
+def start_turn_timer(room_id):
+    """Start timeout timer for current turn"""
+    def timeout_handler():
+        time.sleep(10)  # 10 second timeout
+        
+        game_state = active_games.get(room_id)
+        if not game_state:
+            return
+        
+        current_player_idx = game_state.current_player
+        
+        # Don't auto-play for AI (they have their own trigger)
+        if is_ai_player(room_id, current_player_idx):
+            return
+        
+        logger.info(f"Timeout for player {current_player_idx} in room {room_id} - auto-playing")
+        
+        # Auto-play: play first card with no captures
+        hand = game_state.players[current_player_idx]['hand']
+        if not hand:
+            return
+        
+        card = hand[0]
+        result = game_state.play_card(current_player_idx, card, [])
+        
+        if result['success']:
+            player_id = room_players[room_id][current_player_idx]
+            
+            db.record_move(room_id, game_state.round_number, player_id,
+                          card.code, [], result['is_chkobba'], result['is_haya'])
+            
+            game_state.next_turn()
+            
+            socketio.emit('card_played', {
+                'player_id': player_id,
+                'player_index': current_player_idx,
+                'card': card.code,
+                'captured': [],
+                'is_chkobba': result['is_chkobba'],
+                'is_haya': result['is_haya'],
+                'new_cards_dealt': result.get('new_cards_dealt', False),
+                'next_turn_player': game_state.current_player,
+                'game_state': game_state.to_dict(),
+                'auto_played': True
+            }, room=f'room_{room_id}')
+            
+            logger.info(f"Auto-played for player {current_player_idx}")
+            
+            # Process next turn
+            process_next_turn(room_id)
+    
+    # Cancel existing timer if any
+    if room_id in turn_timers:
+        turn_timers[room_id].cancel()
+    
+    # Start new timer
+    timer = threading.Timer(10.0, timeout_handler)
+    timer.daemon = True
+    timer.start()
+    turn_timers[room_id] = timer
+
+
+def process_next_turn(room_id):
+    """Process turn change and trigger AI/timer as needed"""
+    game_state = active_games.get(room_id)
+    if not game_state:
+        return
+    
+    current_player_idx = game_state.current_player
+    
+    # Check if game ended
+    if game_state.is_finished:
+        socketio.emit('game_ended', {
+            'winner_id': game_state.winner,
+            'final_scores': {i: p['score'] for i, p in enumerate(game_state.players)}
+        }, room=f'room_{room_id}')
+        return
+    
+    # If current player is AI, trigger AI move
+    if is_ai_player(room_id, current_player_idx):
+        trigger_ai_turn(room_id)
+    else:
+        # Start timeout timer for human player
+        start_turn_timer(room_id)
 
 
 # ========== HTTP Routes ==========
@@ -106,6 +278,7 @@ def create_room():
     active_games[room_id] = GameState(num_players)
     room_players[room_id] = [player_id]
     player_id_to_index[room_id] = {player_id: 0}  # First player is index 0
+    ai_players[room_id] = {}  # Initialize AI players dict
     
     # Auto-add AI players if it's an AI game mode
     if 'ai' in game_mode.lower():
@@ -118,6 +291,9 @@ def create_room():
                                          ai_difficulty=ai_difficulty, session_token=None)
             room_players[room_id].append(ai_player_id)
             player_id_to_index[room_id][ai_player_id] = i + 1  # Subsequent indices
+            
+            # Create AI instance
+            ai_players[room_id][i + 1] = AIPlayer(ai_difficulty)
         
         logger.info(f"Created AI game room {room_code} with {ai_count} AI players")
     
@@ -168,10 +344,16 @@ def join_room_endpoint():
         room_players[room_id] = []
     if room_id not in player_id_to_index:
         player_id_to_index[room_id] = {}
+    if room_id not in ai_players:
+        ai_players[room_id] = {}
     
     game_index = len(room_players[room_id])
     room_players[room_id].append(player_id)
     player_id_to_index[room_id][player_id] = game_index
+    
+    # Create AI instance if this is an AI player
+    if is_ai:
+        ai_players[room_id][game_index] = AIPlayer(ai_difficulty)
     
     # Get all players in room
     players = db.get_players_by_room(room_id)
@@ -365,8 +547,6 @@ def handle_join_game(data):
         'required_players': room['num_players']
     })
     
-    # DO NOT emit player_update here - it was already sent in join_room_endpoint
-    # This prevents duplicate player adds
     logger.info(f"Player {player['player_name']} joined WebSocket room {room_code}")
 
 
@@ -383,7 +563,11 @@ def handle_play_card(data):
         return
     
     room_id = session_info['room_id']
-    player_index = session_info['game_index']  # Use game index, not DB player_id
+    player_index = session_info['game_index']
+    
+    # Cancel timeout timer if exists
+    if room_id in turn_timers:
+        turn_timers[room_id].cancel()
     
     game_state = active_games.get(room_id)
     if not game_state:
@@ -423,6 +607,9 @@ def handle_play_card(data):
         }, room=f'room_{room_id}')
         
         logger.info(f"Card played by player_index {player_index}, new cards dealt: {result.get('new_cards_dealt', False)}")
+        
+        # Process next turn (AI or timeout)
+        process_next_turn(room_id)
     else:
         emit('error', {'message': result['message']})
 
@@ -464,6 +651,9 @@ def handle_start_game(data):
     }, room=f'room_{room_id}')
     
     logger.info(f"Game started in room {room_id} with {player_count} players")
+    
+    # Process first turn (might be AI)
+    process_next_turn(room_id)
 
 
 # ========== Error Handlers ==========
