@@ -419,33 +419,60 @@ function animateCardPlay(playedCard, capturedCards) {
 }
 
 function showGameOver(data) {
+  console.log('Game over data:', data);
+  
+  // PAUSE THE GAME - stop all timers and interactions
+  timerManager.stop();
+  
+  // Disable all game interactions
+  const playBtn = document.getElementById('play-btn');
+  if (playBtn) playBtn.disabled = true;
+  
+  // Show game over screen
   showScreen('game-over');
   
+  // Get winner info using player index
+  const winnerIndex = data.winner_id;
+  const winner = gameState.players[winnerIndex];
+  const winnerName = winner ? winner.name : `Player ${winnerIndex + 1}`;
+  
+  // Display winner info
   const winnerEl = document.getElementById('winner-info');
   if (winnerEl) {
-    const winner = gameState.players[data.winner_id];
+    const winnerScore = data.final_scores ? data.final_scores[winnerIndex] : (gameState.scores[winnerIndex] || 0);
     winnerEl.innerHTML = `
-      <h2>${winner?.name || 'Unknown'} Won!</h2>
-      <p>Final Score: ${data.final_scores[data.winner_id]} points</p>
+      <h2>🏆 ${winnerName} Won!</h2>
+      <p>Final Score: ${winnerScore} points</p>
     `;
   }
   
+  // Display all final scores with correct player names
   const scoresEl = document.getElementById('final-scores');
   if (scoresEl) {
     scoresEl.innerHTML = '';
-    Object.entries(data.final_scores || {}).forEach(([playerId, score]) => {
-      const player = gameState.players[parseInt(playerId)];
-      if (player) {
-        const div = document.createElement('div');
-        div.className = 'final-score-item';
-        div.innerHTML = `
-          <span>${player.name}</span>
-          <span>${score} points</span>
-        `;
-        scoresEl.appendChild(div);
-      }
+    
+    // Use final_scores if available, otherwise use current gameState.scores
+    const scores = data.final_scores || gameState.scores || {};
+    
+    gameState.players.forEach((player, idx) => {
+      const score = scores[idx] || 0;
+      const chkobba = gameState.chkobba_count[idx] || 0;
+      const isWinner = idx === winnerIndex;
+      
+      const div = document.createElement('div');
+      div.className = `final-score-item ${isWinner ? 'winner' : ''}`;
+      div.innerHTML = `
+        <span class="player-name">${player.name}${isWinner ? ' 🏆' : ''}</span>
+        <span class="score-detail">
+          <strong>${score}</strong> points
+          <small>(${chkobba} Chkobba)</small>
+        </span>
+      `;
+      scoresEl.appendChild(div);
     });
   }
+  
+  console.log('Game over screen displayed');
 }
 
 function loadSettings() {
