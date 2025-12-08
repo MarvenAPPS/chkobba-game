@@ -157,17 +157,20 @@
 
         <!-- Game Screen -->
         <div id="game-screen" class="screen">
-            <div class="game-layout">
+            <div id="game-container" class="game-layout">
                 <!-- Game Header -->
                 <div class="game-header">
                     <div class="header-info">
                         <div class="player-info">
                             <h3 id="current-player-name"></h3>
-                            <p id="player-score">Score: 0</p>
                         </div>
-                        <div class="timer-display">
-                            <div id="timer" class="timer">5</div>
-                            <p>seconds</p>
+                        
+                        <!-- Timer Progress Bar -->
+                        <div id="timer-container" class="timer-container" style="display: none;">
+                            <div class="timer-bar">
+                                <div id="timer-progress" class="timer-progress"></div>
+                            </div>
+                            <span id="timer-display" class="timer-text">30s</span>
                         </div>
                     </div>
                     <button class="btn btn-sm" onclick="leaveGame()">Leave</button>
@@ -177,21 +180,21 @@
                 <div class="game-area">
                     <!-- Table Cards -->
                     <div class="table-section">
-                        <h4>Table Cards</h4>
+                        <h4>Table Cards <span class="hint">(Click to select for capture)</span></h4>
                         <div id="table-cards" class="cards-display"></div>
                     </div>
 
                     <!-- Your Hand -->
                     <div class="hand-section">
-                        <h4>Your Hand</h4>
+                        <h4>Your Hand <span class="hint">(Click to select card to play)</span></h4>
                         <div id="player-hand" class="hand-display"></div>
                     </div>
 
                     <!-- Action Panel -->
                     <div class="action-panel">
                         <div id="action-buttons">
-                            <button class="btn btn-primary" id="play-btn" onclick="playCard()" disabled>Play Card</button>
-                            <button class="btn btn-outline" id="clear-btn" onclick="clearSelection()" disabled>Clear</button>
+                            <button class="btn btn-primary btn-lg" id="play-btn" onclick="playCard()" disabled>Select a Card</button>
+                            <button class="btn btn-outline" id="clear-btn" onclick="clearSelection()">Clear Selection</button>
                         </div>
                         <div id="message" class="message"></div>
                     </div>
@@ -216,6 +219,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Notification Toast -->
+        <div id="notification" class="notification"></div>
     </div>
 
     <!-- Scripts -->
