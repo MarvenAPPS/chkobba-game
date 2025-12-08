@@ -233,6 +233,51 @@ if ('Notification' in window && Notification.permission === 'default') {
   Notification.requestPermission();
 }
 
+// Card Value Lookup
+const CARD_VALUES = {
+  'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, 'Q': 8, 'J': 9, 'K': 10
+};
+
+/**
+ * Get numeric value of a card
+ * @param {string} cardCode - Card code like '6D' or '7S'
+ * @returns {number} Card value
+ */
+function getCardValue(cardCode) {
+  if (!cardCode || cardCode.length < 2) {
+    console.error('Invalid card code:', cardCode);
+    return 0;
+  }
+  const rank = cardCode.charAt(0);
+  return CARD_VALUES[rank] || 0;
+}
+
+/**
+ * Generate all combinations of r elements from array
+ * @param {Array} array - Input array
+ * @param {number} r - Number of elements per combination
+ * @returns {Array} Array of combinations
+ */
+function getCombinations(array, r) {
+  const result = [];
+  
+  function combine(start, combo) {
+    if (combo.length === r) {
+      result.push([...combo]);
+      return;
+    }
+    
+    for (let i = start; i < array.length; i++) {
+      combo.push(array[i]);
+      combine(i + 1, combo);
+      combo.pop();
+    }
+  }
+  
+  combine(0, []);
+  return result;
+}
+
 // Utility Functions
 function formatTime(seconds) {
   return seconds.toString().padStart(2, '0');

@@ -4,7 +4,7 @@
 
 class TimerManager {
   constructor() {
-    this.duration = 30; // 30 seconds per turn
+    this.duration = 10; // 10 seconds per turn
     this.remaining = this.duration;
     this.isRunning = false;
     this.isPaused = false;
@@ -45,15 +45,15 @@ class TimerManager {
       }
     }, 1000);
 
-    console.log('Timer started: 30 seconds');
+    console.log('Timer started: 10 seconds');
   }
 
   tick() {
     this.remaining--;
     this.updateDisplay();
 
-    // Warning at 10 seconds
-    if (this.remaining === 10 && !this.warningShown) {
+    // Warning at 5 seconds
+    if (this.remaining === 5 && !this.warningShown) {
       this.showWarning();
       this.warningShown = true;
       if (typeof audioManager !== 'undefined') {
@@ -61,8 +61,8 @@ class TimerManager {
       }
     }
 
-    // Critical at 5 seconds
-    if (this.remaining <= 5) {
+    // Critical at 3 seconds
+    if (this.remaining <= 3) {
       if (this.timerContainer) {
         this.timerContainer.classList.add('critical');
       }
@@ -81,9 +81,9 @@ class TimerManager {
       this.progressBar.style.width = `${percentage}%`;
 
       // Color coding
-      if (this.remaining <= 5) {
+      if (this.remaining <= 3) {
         this.progressBar.style.backgroundColor = '#e74c3c'; // Red
-      } else if (this.remaining <= 10) {
+      } else if (this.remaining <= 5) {
         this.progressBar.style.backgroundColor = '#f39c12'; // Orange
       } else {
         this.progressBar.style.backgroundColor = '#3498db'; // Blue
@@ -98,7 +98,7 @@ class TimerManager {
 
   showWarning() {
     if (typeof showInfo === 'function') {
-      showInfo(`⏱️ 10 seconds remaining!`);
+      showInfo(`⏱️ 5 seconds remaining!`);
     }
   }
 
