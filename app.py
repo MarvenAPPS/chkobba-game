@@ -329,13 +329,16 @@ def handle_join_game(data):
         return
     
     room_id = player['room_id']
-    player_index = get_player_game_index(room_id, player['id'])
+    player_id = player['id']
+    player_index = get_player_game_index(room_id, player_id)
     
+    # Join the room
     join_room(f'room_{room_id}')
     
+    # Update active session
     active_sessions[session_token] = {
         'room_id': room_id,
-        'player_id': player['id'],
+        'player_id': player_id,
         'game_index': player_index,
         'socket_id': request.sid
     }
@@ -362,21 +365,9 @@ def handle_join_game(data):
         'required_players': room['num_players']
     })
     
-    # Notify others in room about new player
-    emit('player_update', {
-        'action': 'connected',
-        'player': {
-            'id': player['id'],
-            'name': player['player_name'],
-            'is_ai': bool(player['is_ai'])
-        },
-        'players': [
-            {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
-            for p in players
-        ],
-        'total_players': len(players),
-        'required_players': room['num_players']
-    }, room=f'room_{room_id}', include_self=False)
+    # DO NOT emit player_update here - it was already sent in join_room_endpoint
+    # This prevents duplicate player adds
+    logger.info(f"Player {player['player_name']} joined WebSocket room {room_code}")
 
 
 @socketio.on('play_card')

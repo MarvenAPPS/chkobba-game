@@ -8,7 +8,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'chkobba-dev-secret-key-change-in-production'
     DEBUG = os.environ.get('FLASK_ENV') == 'development'
     HOST = '0.0.0.0'
-    PORT = int(os.environ.get('PORT', 5000))
+    PORT = int(os.environ.get('PORT', 9988))
     
     # SocketIO Configuration
     SOCKETIO_CORS_ALLOWED_ORIGINS = '*'
