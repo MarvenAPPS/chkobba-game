@@ -203,23 +203,26 @@ function findCapturableCards(handCard, tableCards) {
   const cardValue = getCardValue(handCard);
   const capturableSet = new Set();
   
-  // Single card captures
+  // Single card captures (1-to-1 match)
+  let hasSingleMatch = false;
   tableCards.forEach(tableCard => {
     if (getCardValue(tableCard) === cardValue) {
       capturableSet.add(tableCard);
+      hasSingleMatch = true;
     }
   });
   
-  // Sum captures (2 or more cards)
-  // Try all combinations of 2+ cards
-  for (let r = 2; r <= tableCards.length; r++) {
-    const combos = getCombinations(tableCards, r);
-    combos.forEach(combo => {
-      const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
-      if (sum === cardValue) {
-        combo.forEach(card => capturableSet.add(card));
-      }
-    });
+  // Sum captures (2 or more cards) - only if no 1-to-1 match exists
+  if (!hasSingleMatch) {
+    for (let r = 2; r <= tableCards.length; r++) {
+      const combos = getCombinations(tableCards, r);
+      combos.forEach(combo => {
+        const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
+        if (sum === cardValue) {
+          combo.forEach(card => capturableSet.add(card));
+        }
+      });
+    }
   }
   
   return Array.from(capturableSet);
@@ -233,22 +236,26 @@ function findAllCaptureCombinations(handCard, tableCards) {
   const cardValue = getCardValue(handCard);
   const validCombos = [];
   
-  // Single card captures
+  // Single card captures (1-to-1)
+  let hasSingleMatch = false;
   tableCards.forEach(tableCard => {
     if (getCardValue(tableCard) === cardValue) {
       validCombos.push([tableCard]);
+      hasSingleMatch = true;
     }
   });
   
-  // Sum captures (2 or more cards)
-  for (let r = 2; r <= tableCards.length; r++) {
-    const combos = getCombinations(tableCards, r);
-    combos.forEach(combo => {
-      const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
-      if (sum === cardValue) {
-        validCombos.push(combo);
-      }
-    });
+  // Sum captures (2 or more cards) - only if no 1-to-1 match
+  if (!hasSingleMatch) {
+    for (let r = 2; r <= tableCards.length; r++) {
+      const combos = getCombinations(tableCards, r);
+      combos.forEach(combo => {
+        const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
+        if (sum === cardValue) {
+          validCombos.push(combo);
+        }
+      });
+    }
   }
   
   return validCombos;
@@ -270,17 +277,17 @@ function selectCard(card) {
   } else {
     gameState.selected_card = card;
     
-    // Auto-detect captures
+    // Auto-detect captures for convenience (but allow skipping)
     const captureCombos = findAllCaptureCombinations(card, gameState.table_cards);
     
     if (captureCombos.length === 1) {
       // Only one way to capture - auto-select it
       gameState.captured_cards = [...captureCombos[0]];
-      showInfo(`Auto-selected capture: ${captureCombos[0].join(', ')}`);
+      showInfo(`Auto-selected capture: ${captureCombos[0].join(', ')} (you can deselect to skip)`);
     } else if (captureCombos.length > 1) {
       // Multiple options - clear selection and let user choose
       gameState.captured_cards = [];
-      showInfo(`Multiple capture options available - select table cards`);
+      showInfo(`Multiple capture options available - select table cards or skip`);
     } else {
       // No captures possible - clear selection
       gameState.captured_cards = [];
@@ -360,21 +367,22 @@ function playCard() {
     return;
   }
   
-  // Validate that if captures are possible, user has selected them
-  const captureCombos = findAllCaptureCombinations(gameState.selected_card, gameState.table_cards);
-  
-  if (captureCombos.length > 0 && gameState.captured_cards.length === 0) {
-    showError('You must capture when possible! Click the table cards to select them.');
-    return;
-  }
-  
-  // Validate that selected capture is valid
+  // Validate capture if player is attempting to capture
   if (gameState.captured_cards.length > 0) {
     const selectedSum = gameState.captured_cards.reduce((acc, card) => acc + getCardValue(card), 0);
     const handCardValue = getCardValue(gameState.selected_card);
     
     if (selectedSum !== handCardValue) {
       showError(`Invalid capture: ${gameState.captured_cards.join('+')} (${selectedSum}) ≠ ${gameState.selected_card} (${handCardValue})`);
+      return;
+    }
+    
+    // Check for 1-to-1 match violation
+    const captureCombos = findAllCaptureCombinations(gameState.selected_card, gameState.table_cards);
+    const hasSingleMatch = captureCombos.some(combo => combo.length === 1);
+    
+    if (hasSingleMatch && gameState.captured_cards.length > 1) {
+      showError('You must capture the single matching card (not a combination) when a 1-to-1 match exists');
       return;
     }
   }
