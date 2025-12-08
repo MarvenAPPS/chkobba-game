@@ -170,15 +170,23 @@ socket.on('round_ended', (data) => {
   const playBtn = document.getElementById('play-btn');
   if (playBtn) playBtn.disabled = true;
   
-  // Update scores
-  gameState.scores = data.scores;
-  gameState.chkobba_count = data.chkobba_count;
+  // Update scores from backend
+  if (data.total_scores) {
+    gameState.scores = data.total_scores;
+  }
+  
+  // Update scoreboard
   updateScoreboard();
   
-  // Show round summary with detailed scoring
-  if (data.round_scores) {
-    showRoundSummary(data.round_scores, data.scoring_details);
+  // Show round summary with all data from backend
+  if (typeof showRoundSummary === 'function') {
+    showRoundSummary(
+      data.round_scores,
+      data.scoring_details,
+      data.player_names
+    );
   } else {
+    console.error('showRoundSummary function not found');
     showInfo('🏁 Round ended!');
   }
 });
@@ -234,36 +242,4 @@ function emitStartGame() {
   socket.emit('start_game', {
     session_token: gameState.session_token
   });
-}
-
-// ========== Round Summary Display ==========
-
-function showRoundSummary(roundScores, scoringDetails) {
-  let summaryHtml = '<div class="round-summary"><h3>🏆 Round Complete!</h3>';
-  
-  // Show each player's round performance
-  gameState.players.forEach((player, idx) => {
-    const score = roundScores[idx] || 0;
-    const details = scoringDetails?.[idx] || {};
-    
-    summaryHtml += `
-      <div class="player-round-score">
-        <strong>${player.name}:</strong> ${score} points
-        <ul class="scoring-breakdown">
-    `;
-    
-    if (details.most_cards) summaryHtml += '<li>✅ Most Cards (1pt)</li>';
-    if (details.most_diamonds) summaryHtml += '<li>✅ Most Diamonds (1pt)</li>';
-    if (details.haya) summaryHtml += '<li>✅ 7 of Diamonds - Haya (1pt)</li>';
-    if (details.dinari) summaryHtml += '<li>✅ 7 of Clubs - Dinari (1pt)</li>';
-    if (details.chkobba_count > 0) {
-      summaryHtml += `<li>✅ ${details.chkobba_count} Chkobba (${details.chkobba_count}pt)</li>`;
-    }
-    
-    summaryHtml += '</ul></div>';
-  });
-  
-  summaryHtml += '</div>';
-  
-  showInfo(summaryHtml, 5000); // Show for 5 seconds
 }
