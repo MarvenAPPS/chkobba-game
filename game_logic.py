@@ -107,6 +107,7 @@ class GameState:
         
         # Deal 4 cards to table
         self.table = self.deck.draw(4)
+        logger.info(f"Game setup complete. Table: {[c.code for c in self.table]}")
     
     def _deal_new_hands(self):
         """Deal new hands to all players (3 cards each)"""
@@ -168,16 +169,22 @@ class GameState:
         Returns:
             Dict with 'success', 'is_chkobba', 'is_haya', 'message', 'new_cards_dealt'
         """
+        logger.info(f"Player {player_idx} attempting to play {card.code} and capture {[c.code for c in captured_cards]}")
+        logger.info(f"Current table: {[c.code for c in self.table]}")
+        logger.info(f"Player hand: {[c.code for c in self.players[player_idx]['hand']]}")
+        
         if self.current_player != player_idx:
             return {'success': False, 'message': 'Not your turn'}
         
         hand = self.players[player_idx]['hand']
         if card not in hand:
+            logger.error(f"Card {card.code} not in hand: {[c.code for c in hand]}")
             return {'success': False, 'message': 'Card not in hand'}
         
         # Validate capture
         is_valid, msg = self._validate_capture(card, captured_cards)
         if not is_valid:
+            logger.error(f"Capture validation failed: {msg}")
             return {'success': False, 'message': msg}
         
         # Execute play
@@ -186,14 +193,18 @@ class GameState:
             self.table.remove(captured_card)
         
         is_chkobba = len(self.table) == 0 and len(captured_cards) > 0
-        is_haya = Card('7', 'D') in captured_cards
+        is_haya = any(c.rank == '7' and c.suit == 'D' for c in captured_cards)
         
         if is_chkobba:
             self.players[player_idx]['chkobba_count'] += 1
+            logger.info(f"CHKOBBA! Player {player_idx} now has {self.players[player_idx]['chkobba_count']} chkobbas")
         
         # If no cards captured, add to table
         if not captured_cards:
             self.table.append(card)
+            logger.info(f"No capture. Card {card.code} added to table")
+        else:
+            logger.info(f"Captured {len(captured_cards)} cards: {[c.code for c in captured_cards]}")
         
         # Record move
         self.move_history.append({
@@ -207,6 +218,8 @@ class GameState:
         # Check if we need to deal new cards
         new_cards_dealt = self._check_and_deal_cards()
         
+        logger.info(f"Table after play: {[c.code for c in self.table]}")
+        
         return {
             'success': True,
             'is_chkobba': is_chkobba,
@@ -219,20 +232,30 @@ class GameState:
         """Validate card capture according to rules"""
         card_value = card.value
         
+        logger.info(f"Validating capture: card={card.code} (value={card_value}), captured={[c.code for c in captured_cards]}")
+        
         # No captures is valid
         if not captured_cards:
+            logger.info("No captures - valid")
             return True, ''
+        
+        # Convert table to codes for comparison
+        table_codes = [c.code for c in self.table]
         
         # All captured cards must be on table
         for cap_card in captured_cards:
-            if cap_card not in self.table:
+            if cap_card.code not in table_codes:
+                logger.error(f"Card {cap_card.code} not on table. Table: {table_codes}")
                 return False, f'{cap_card.code} is not on table'
         
         # Sum must match card value
         total_value = sum(c.value for c in captured_cards)
+        logger.info(f"Capture sum: {total_value}, card value: {card_value}")
+        
         if total_value != card_value:
             return False, f'Captured cards sum ({total_value}) does not match card value ({card_value})'
         
+        logger.info("Capture validation successful")
         return True, ''
     
     def end_round(self) -> Dict:
@@ -271,6 +294,7 @@ class GameState:
         """Move to next player's turn"""
         if not self.is_finished:
             self.current_player = (self.current_player + 1) % self.num_players
+            logger.info(f"Turn changed to player {self.current_player}")
     
     def to_dict(self) -> Dict:
         """Convert game state to dictionary for serialization"""
