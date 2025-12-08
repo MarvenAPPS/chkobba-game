@@ -2,9 +2,9 @@
  * UI rendering and interaction handlers
  */
 
-function renderCard(card, clickable = false, selected = false) {
+function renderCard(card, clickable = false, selected = false, capturable = false) {
   const div = document.createElement('div');
-  div.className = `card ${selected ? 'selected' : ''}`;
+  div.className = `card ${selected ? 'selected' : ''} ${capturable ? 'capturable' : ''}`;
   div.dataset.card = card;
   
   const [rank, suit] = [card.charAt(0), card.charAt(1)];
@@ -26,9 +26,14 @@ function renderTableCards() {
   const isMyTurn = (gameState.current_player === gameState.player_index) ||
                    (gameState.current_player === gameState.player_id);
   
+  // Find capturable cards if a hand card is selected
+  const capturableCards = isMyTurn && gameState.selected_card ? 
+    findCapturableCards(gameState.selected_card, gameState.table_cards) : [];
+  
   gameState.table_cards.forEach(card => {
     const isSelected = gameState.captured_cards.includes(card);
-    const cardEl = renderCard(card, isMyTurn, isSelected);
+    const isCapturable = capturableCards.includes(card);
+    const cardEl = renderCard(card, isMyTurn, isSelected, isCapturable);
     
     if (isMyTurn) {
       cardEl.addEventListener('click', () => toggleCapturedCard(card));
@@ -51,7 +56,7 @@ function renderPlayerHand() {
   
   gameState.player_hand.forEach(card => {
     const isSelected = gameState.selected_card === card;
-    const cardEl = renderCard(card, true, isSelected);
+    const cardEl = renderCard(card, true, isSelected, false);
     cardEl.addEventListener('click', () => selectCard(card));
     container.appendChild(cardEl);
   });
@@ -175,6 +180,65 @@ function updateCurrentTurn() {
   }
 }
 
+/**
+ * Find all cards on table that can be captured by the given card
+ * Returns array of card codes that are part of valid capture combinations
+ */
+function findCapturableCards(handCard, tableCards) {
+  const cardValue = getCardValue(handCard);
+  const capturableSet = new Set();
+  
+  // Single card captures
+  tableCards.forEach(tableCard => {
+    if (getCardValue(tableCard) === cardValue) {
+      capturableSet.add(tableCard);
+    }
+  });
+  
+  // Sum captures (2 or more cards)
+  // Try all combinations of 2+ cards
+  for (let r = 2; r <= tableCards.length; r++) {
+    const combos = getCombinations(tableCards, r);
+    combos.forEach(combo => {
+      const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
+      if (sum === cardValue) {
+        combo.forEach(card => capturableSet.add(card));
+      }
+    });
+  }
+  
+  return Array.from(capturableSet);
+}
+
+/**
+ * Find all valid capture combinations for a hand card
+ * Returns array of arrays, each inner array is a valid combination
+ */
+function findAllCaptureCombinations(handCard, tableCards) {
+  const cardValue = getCardValue(handCard);
+  const validCombos = [];
+  
+  // Single card captures
+  tableCards.forEach(tableCard => {
+    if (getCardValue(tableCard) === cardValue) {
+      validCombos.push([tableCard]);
+    }
+  });
+  
+  // Sum captures (2 or more cards)
+  for (let r = 2; r <= tableCards.length; r++) {
+    const combos = getCombinations(tableCards, r);
+    combos.forEach(combo => {
+      const sum = combo.reduce((acc, card) => acc + getCardValue(card), 0);
+      if (sum === cardValue) {
+        validCombos.push(combo);
+      }
+    });
+  }
+  
+  return validCombos;
+}
+
 function selectCard(card) {
   const isMyTurn = (gameState.current_player === gameState.player_index) ||
                    (gameState.current_player === gameState.player_id);
@@ -187,11 +251,29 @@ function selectCard(card) {
   // Toggle selection
   if (gameState.selected_card === card) {
     gameState.selected_card = null;
+    gameState.captured_cards = [];
   } else {
     gameState.selected_card = card;
+    
+    // Auto-detect captures
+    const captureCombos = findAllCaptureCombinations(card, gameState.table_cards);
+    
+    if (captureCombos.length === 1) {
+      // Only one way to capture - auto-select it
+      gameState.captured_cards = [...captureCombos[0]];
+      showInfo(`Auto-selected capture: ${captureCombos[0].join(', ')}`);
+    } else if (captureCombos.length > 1) {
+      // Multiple options - clear selection and let user choose
+      gameState.captured_cards = [];
+      showInfo(`Multiple capture options available - select table cards`);
+    } else {
+      // No captures possible - clear selection
+      gameState.captured_cards = [];
+    }
   }
   
   renderPlayerHand();
+  renderTableCards();
   updatePlayButton();
 }
 
@@ -200,6 +282,18 @@ function toggleCapturedCard(card) {
                    (gameState.current_player === gameState.player_id);
                    
   if (!isMyTurn) {
+    return;
+  }
+  
+  if (!gameState.selected_card) {
+    showError('Select a card from your hand first');
+    return;
+  }
+  
+  // Check if this card is capturable by the selected hand card
+  const capturableCards = findCapturableCards(gameState.selected_card, gameState.table_cards);
+  if (!capturableCards.includes(card)) {
+    showError('This card cannot be captured by your selected card');
     return;
   }
   
@@ -249,6 +343,25 @@ function playCard() {
   if (!isMyTurn) {
     showError('Not your turn');
     return;
+  }
+  
+  // Validate that if captures are possible, user has selected them
+  const captureCombos = findAllCaptureCombinations(gameState.selected_card, gameState.table_cards);
+  
+  if (captureCombos.length > 0 && gameState.captured_cards.length === 0) {
+    showError('You must capture when possible! Click the table cards to select them.');
+    return;
+  }
+  
+  // Validate that selected capture is valid
+  if (gameState.captured_cards.length > 0) {
+    const selectedSum = gameState.captured_cards.reduce((acc, card) => acc + getCardValue(card), 0);
+    const handCardValue = getCardValue(gameState.selected_card);
+    
+    if (selectedSum !== handCardValue) {
+      showError(`Invalid capture: ${gameState.captured_cards.join('+')} (${selectedSum}) ≠ ${gameState.selected_card} (${handCardValue})`);
+      return;
+    }
   }
   
   // Stop timer
