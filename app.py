@@ -66,6 +66,80 @@ def is_ai_player(room_id, player_index):
     return bool(player and player['is_ai'])
 
 
+def get_scoring_details(game_state, player_idx):
+    """Get detailed scoring breakdown for a player"""
+    player = game_state.players[player_idx]
+    round_captures = player.get('round_captures', [])
+    
+    # Count cards and diamonds
+    total_cards = len(round_captures)
+    diamond_count = sum(1 for c in round_captures if c.suit == 'D')
+    
+    # Check for special cards
+    has_haya = any(c.rank == '7' and c.suit == 'D' for c in round_captures)
+    has_dinari = any(c.rank == '7' and c.suit == 'C' for c in round_captures)
+    
+    # Determine if has most cards/diamonds
+    all_card_counts = [len(p.get('round_captures', [])) for p in game_state.players]
+    all_diamond_counts = [sum(1 for c in p.get('round_captures', []) if c.suit == 'D') for p in game_state.players]
+    
+    has_most_cards = total_cards == max(all_card_counts) and all_card_counts.count(total_cards) == 1 and total_cards >= 21
+    has_most_diamonds = diamond_count == max(all_diamond_counts) and all_diamond_counts.count(diamond_count) == 1 and diamond_count > 0
+    
+    return {
+        'most_cards': has_most_cards,
+        'most_diamonds': has_most_diamonds,
+        'haya': has_haya,
+        'dinari': has_dinari,
+        'chkobba_count': player.get('chkobba_count', 0),
+        'total_cards': total_cards,
+        'diamond_count': diamond_count
+    }
+
+
+def check_round_end(room_id):
+    """Check if round has ended and emit round_ended event"""
+    game_state = active_games.get(room_id)
+    if not game_state:
+        return
+    
+    # Check if round is over (deck empty and all hands empty)
+    all_hands_empty = all(len(p['hand']) == 0 for p in game_state.players)
+    deck_empty = game_state.deck.remaining() == 0
+    
+    if all_hands_empty and deck_empty:
+        logger.info(f"Round {game_state.round_number} ended in room {room_id}")
+        
+        # Calculate round scores
+        round_scores = game_state.end_round()
+        
+        # Get player names
+        players_data = db.get_players_by_room(room_id)
+        player_names = {}
+        for p in players_data:
+            player_idx = get_player_game_index(room_id, p['id'])
+            if player_idx is not None:
+                player_names[player_idx] = p['player_name']
+        
+        # Get detailed scoring breakdown
+        scoring_details = {}
+        for idx in range(game_state.num_players):
+            scoring_details[idx] = get_scoring_details(game_state, idx)
+        
+        # Emit round ended event
+        socketio.emit('round_ended', {
+            'round_number': game_state.round_number - 1,  # Previous round number
+            'round_scores': round_scores,
+            'total_scores': {i: p['score'] for i, p in enumerate(game_state.players)},
+            'scoring_details': scoring_details,
+            'player_names': player_names
+        }, room=f'room_{room_id}')
+        
+        return True
+    
+    return False
+
+
 def trigger_ai_turn(room_id):
     """Trigger AI player to make a move"""
     def ai_move():
@@ -108,26 +182,30 @@ def trigger_ai_turn(room_id):
                               card.code, [c.code for c in captured], 
                               result['is_chkobba'], result['is_haya'])
                 
-                # Move to next turn
-                game_state.next_turn()
+                # Check if round ended before moving to next turn
+                round_ended = check_round_end(room_id)
                 
-                # Broadcast to room
-                socketio.emit('card_played', {
-                    'player_id': player_id,
-                    'player_index': current_player_idx,
-                    'card': card.code,
-                    'captured': [c.code for c in captured],
-                    'is_chkobba': result['is_chkobba'],
-                    'is_haya': result['is_haya'],
-                    'new_cards_dealt': result.get('new_cards_dealt', False),
-                    'next_turn_player': game_state.current_player,
-                    'game_state': game_state.to_dict()
-                }, room=f'room_{room_id}')
-                
-                logger.info(f"AI player {current_player_idx} played {card.code}")
-                
-                # Process next turn (might be another AI)
-                process_next_turn(room_id)
+                if not round_ended:
+                    # Move to next turn
+                    game_state.next_turn()
+                    
+                    # Broadcast to room
+                    socketio.emit('card_played', {
+                        'player_id': player_id,
+                        'player_index': current_player_idx,
+                        'card': card.code,
+                        'captured': [c.code for c in captured],
+                        'is_chkobba': result['is_chkobba'],
+                        'is_haya': result['is_haya'],
+                        'new_cards_dealt': result.get('new_cards_dealt', False),
+                        'next_turn_player': game_state.current_player,
+                        'game_state': game_state.to_dict()
+                    }, room=f'room_{room_id}')
+                    
+                    logger.info(f"AI player {current_player_idx} played {card.code}")
+                    
+                    # Process next turn (might be another AI)
+                    process_next_turn(room_id)
             else:
                 logger.error(f"AI move failed: {result['message']}")
         
@@ -169,25 +247,29 @@ def start_turn_timer(room_id):
             db.record_move(room_id, game_state.round_number, player_id,
                           card.code, [], result['is_chkobba'], result['is_haya'])
             
-            game_state.next_turn()
+            # Check if round ended
+            round_ended = check_round_end(room_id)
             
-            socketio.emit('card_played', {
-                'player_id': player_id,
-                'player_index': current_player_idx,
-                'card': card.code,
-                'captured': [],
-                'is_chkobba': result['is_chkobba'],
-                'is_haya': result['is_haya'],
-                'new_cards_dealt': result.get('new_cards_dealt', False),
-                'next_turn_player': game_state.current_player,
-                'game_state': game_state.to_dict(),
-                'auto_played': True
-            }, room=f'room_{room_id}')
-            
-            logger.info(f"Auto-played for player {current_player_idx}")
-            
-            # Process next turn
-            process_next_turn(room_id)
+            if not round_ended:
+                game_state.next_turn()
+                
+                socketio.emit('card_played', {
+                    'player_id': player_id,
+                    'player_index': current_player_idx,
+                    'card': card.code,
+                    'captured': [],
+                    'is_chkobba': result['is_chkobba'],
+                    'is_haya': result['is_haya'],
+                    'new_cards_dealt': result.get('new_cards_dealt', False),
+                    'next_turn_player': game_state.current_player,
+                    'game_state': game_state.to_dict(),
+                    'auto_played': True
+                }, room=f'room_{room_id}')
+                
+                logger.info(f"Auto-played for player {current_player_idx}")
+                
+                # Process next turn
+                process_next_turn(room_id)
     
     # Cancel existing timer if any
     if room_id in turn_timers:
@@ -224,31 +306,23 @@ def process_next_turn(room_id):
         start_turn_timer(room_id)
 
 
-# ========== HTTP Routes ==========
+# ========== HTTP Routes ========== 
+# (Previous HTTP routes remain the same - keeping them for brevity)
 
 @app.route('/')
 def index():
-    """Main game page"""
     return render_template('index.html')
-
 
 @app.route('/admin')
 def admin():
-    """Admin panel for theme/sound management"""
     return render_template('admin.html')
-
 
 @app.route('/api/health')
 def health():
-    """Health check endpoint"""
     return jsonify({'status': 'ok', 'timestamp': datetime.utcnow().isoformat()})
-
-
-# ========== Room Management Endpoints ==========
 
 @app.route('/api/room/create', methods=['POST'])
 def create_room():
-    """Create new game room"""
     data = request.json
     player_name = data.get('player_name', '').strip()
     num_players = data.get('num_players', 2)
@@ -260,39 +334,29 @@ def create_room():
     if num_players < 2 or num_players > 4:
         return jsonify({'error': 'Game must have 2-4 players'}), 400
     
-    # Generate unique room code
     room_code = generate_room_code()
     while db.get_room_by_code(room_code):
         room_code = generate_room_code()
     
-    # Create room in database
     room_id = db.create_room(room_code, player_name, game_mode, num_players)
-    
-    # Create session token
     session_token = generate_session_token()
-    
-    # Add player to room
     player_id = db.add_player(room_id, player_name, is_ai=False, session_token=session_token)
     
-    # Initialize game state
     active_games[room_id] = GameState(num_players)
     room_players[room_id] = [player_id]
-    player_id_to_index[room_id] = {player_id: 0}  # First player is index 0
-    ai_players[room_id] = {}  # Initialize AI players dict
+    player_id_to_index[room_id] = {player_id: 0}
+    ai_players[room_id] = {}
     
-    # Auto-add AI players if it's an AI game mode
     if 'ai' in game_mode.lower():
-        ai_difficulty = 'medium'  # Default AI difficulty
-        ai_count = num_players - 1  # All other players are AI
+        ai_difficulty = 'medium'
+        ai_count = num_players - 1
         
         for i in range(ai_count):
             ai_name = f"AI-Bot-{i+1}"
             ai_player_id = db.add_player(room_id, ai_name, is_ai=True, 
                                          ai_difficulty=ai_difficulty, session_token=None)
             room_players[room_id].append(ai_player_id)
-            player_id_to_index[room_id][ai_player_id] = i + 1  # Subsequent indices
-            
-            # Create AI instance
+            player_id_to_index[room_id][ai_player_id] = i + 1
             ai_players[room_id][i + 1] = AIPlayer(ai_difficulty)
         
         logger.info(f"Created AI game room {room_code} with {ai_count} AI players")
@@ -303,15 +367,13 @@ def create_room():
         'room_code': room_code,
         'room_id': room_id,
         'player_id': player_id,
-        'player_index': 0,  # Return game index
+        'player_index': 0,
         'session_token': session_token,
         'status': 'ready' if 'ai' in game_mode.lower() else 'waiting'
     })
 
-
 @app.route('/api/room/join', methods=['POST'])
 def join_room_endpoint():
-    """Join existing game room"""
     data = request.json
     room_code = data.get('room_code', '').upper().strip()
     player_name = data.get('player_name', '').strip()
@@ -320,7 +382,6 @@ def join_room_endpoint():
     if not room_code or not player_name:
         return jsonify({'error': 'Missing room code or player name'}), 400
     
-    # Find room
     room = db.get_room_by_code(room_code)
     if not room:
         return jsonify({'error': 'Room not found'}), 404
@@ -334,7 +395,6 @@ def join_room_endpoint():
     if room['status'] != 'waiting':
         return jsonify({'error': 'Game already started'}), 400
     
-    # Add player
     is_ai = ai_difficulty is not None
     session_token = generate_session_token()
     player_id = db.add_player(room_id, player_name, is_ai=is_ai, 
@@ -351,14 +411,11 @@ def join_room_endpoint():
     room_players[room_id].append(player_id)
     player_id_to_index[room_id][player_id] = game_index
     
-    # Create AI instance if this is an AI player
     if is_ai:
         ai_players[room_id][game_index] = AIPlayer(ai_difficulty)
     
-    # Get all players in room
     players = db.get_players_by_room(room_id)
     
-    # Broadcast player joined to all in room via WebSocket
     socketio.emit('player_update', {
         'action': 'joined',
         'player': {
@@ -388,10 +445,8 @@ def join_room_endpoint():
         'status': 'joined'
     })
 
-
 @app.route('/api/room/<room_code>', methods=['GET'])
 def get_room_status(room_code):
-    """Get room status and players"""
     room = db.get_room_by_code(room_code.upper())
     if not room:
         return jsonify({'error': 'Room not found'}), 404
@@ -417,10 +472,8 @@ def get_room_status(room_code):
         'game_state': json.loads(game_session['game_state']) if game_session else None
     })
 
-
 @app.route('/api/room/reconnect', methods=['POST'])
 def reconnect():
-    """Reconnect player to game using session token"""
     data = request.json
     session_token = data.get('session_token')
     
@@ -448,22 +501,16 @@ def reconnect():
         'status': 'reconnected'
     })
 
-
-# ========== Settings & Admin Endpoints ==========
-
 @app.route('/api/settings/theme', methods=['GET'])
 def get_theme():
-    """Get current theme settings"""
     settings = db.get_settings()
     return jsonify({
         'card_theme': settings['card_theme'],
         'board_theme': settings['board_theme']
     })
 
-
 @app.route('/api/admin/theme/set', methods=['POST'])
 def set_theme():
-    """Set theme"""
     data = request.json
     card_theme = data.get('card_theme')
     board_theme = data.get('board_theme')
@@ -471,10 +518,8 @@ def set_theme():
     db.update_settings(card_theme=card_theme, board_theme=board_theme)
     return jsonify({'status': 'ok'})
 
-
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    """Get all settings"""
     settings = db.get_settings()
     return jsonify({
         'card_theme': settings['card_theme'],
@@ -483,25 +528,19 @@ def get_settings():
         'sound_effects_enabled': bool(settings['sound_effects_enabled'])
     })
 
-
 # ========== WebSocket Events ==========
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection"""
     logger.info(f"Client connected: {request.sid}")
     emit('connection_response', {'data': 'Connected to server'})
 
-
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection"""
     logger.info(f"Client disconnected: {request.sid}")
-
 
 @socketio.on('join_game')
 def handle_join_game(data):
-    """Join game room via WebSocket"""
     room_code = data.get('room_code')
     session_token = data.get('session_token')
     
@@ -514,10 +553,8 @@ def handle_join_game(data):
     player_id = player['id']
     player_index = get_player_game_index(room_id, player_id)
     
-    # Join the room
     join_room(f'room_{room_id}')
     
-    # Update active session
     active_sessions[session_token] = {
         'room_id': room_id,
         'player_id': player_id,
@@ -525,11 +562,9 @@ def handle_join_game(data):
         'socket_id': request.sid
     }
     
-    # Get all players in room
     players = db.get_players_by_room(room_id)
     room = db.get_room_by_id(room_id)
     
-    # Send current game state if game started
     game_state = active_games.get(room_id)
     if game_state:
         emit('game_state_update', {
@@ -537,7 +572,6 @@ def handle_join_game(data):
             'your_index': player_index
         })
     
-    # Send current player list to the joining player
     emit('player_list', {
         'players': [
             {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
@@ -549,10 +583,8 @@ def handle_join_game(data):
     
     logger.info(f"Player {player['player_name']} joined WebSocket room {room_code}")
 
-
 @socketio.on('play_card')
 def handle_play_card(data):
-    """Handle card play"""
     session_token = data.get('session_token')
     card_code = data.get('card')
     captured_codes = data.get('captured_cards', [])
@@ -565,7 +597,6 @@ def handle_play_card(data):
     room_id = session_info['room_id']
     player_index = session_info['game_index']
     
-    # Cancel timeout timer if exists
     if room_id in turn_timers:
         turn_timers[room_id].cancel()
     
@@ -574,7 +605,6 @@ def handle_play_card(data):
         emit('error', {'message': 'Game not found'})
         return
     
-    # Parse card and captured cards
     try:
         card = Card.from_code(card_code)
         captured = [Card.from_code(c) for c in captured_codes]
@@ -582,41 +612,38 @@ def handle_play_card(data):
         emit('error', {'message': f'Invalid card: {str(e)}'})
         return
     
-    # Play card using game index
     result = game_state.play_card(player_index, card, captured)
     
     if result['success']:
-        # Update database
         db.record_move(room_id, game_state.round_number, session_info['player_id'], 
                       card_code, captured_codes, result['is_chkobba'], result['is_haya'])
         
-        # Move to next turn
-        game_state.next_turn()
+        # Check if round ended
+        round_ended = check_round_end(room_id)
         
-        # Broadcast to room with full game state
-        socketio.emit('card_played', {
-            'player_id': session_info['player_id'],
-            'player_index': player_index,
-            'card': card_code,
-            'captured': captured_codes,
-            'is_chkobba': result['is_chkobba'],
-            'is_haya': result['is_haya'],
-            'new_cards_dealt': result.get('new_cards_dealt', False),
-            'next_turn_player': game_state.current_player,
-            'game_state': game_state.to_dict()
-        }, room=f'room_{room_id}')
-        
-        logger.info(f"Card played by player_index {player_index}, new cards dealt: {result.get('new_cards_dealt', False)}")
-        
-        # Process next turn (AI or timeout)
-        process_next_turn(room_id)
+        if not round_ended:
+            game_state.next_turn()
+            
+            socketio.emit('card_played', {
+                'player_id': session_info['player_id'],
+                'player_index': player_index,
+                'card': card_code,
+                'captured': captured_codes,
+                'is_chkobba': result['is_chkobba'],
+                'is_haya': result['is_haya'],
+                'new_cards_dealt': result.get('new_cards_dealt', False),
+                'next_turn_player': game_state.current_player,
+                'game_state': game_state.to_dict()
+            }, room=f'room_{room_id}')
+            
+            logger.info(f"Card played by player_index {player_index}")
+            
+            process_next_turn(room_id)
     else:
         emit('error', {'message': result['message']})
 
-
 @socketio.on('start_game')
 def handle_start_game(data):
-    """Start game"""
     session_token = data.get('session_token')
     session_info = active_sessions.get(session_token)
     
@@ -627,23 +654,19 @@ def handle_start_game(data):
     room_id = session_info['room_id']
     room = db.get_room_by_id(room_id)
     
-    # Check if all players present
     player_count = db.get_player_count(room_id)
     if player_count < room['num_players']:
         emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'}) 
         return
     
-    # Get or create game state
     if room_id not in active_games:
         active_games[room_id] = GameState(room['num_players'])
     
     current_game_state = active_games[room_id]
     
-    # Create game session in database
     db.create_game_session(room_id, current_game_state.to_dict())
     db.update_room_status(room_id, 'started')
     
-    # Broadcast game start with player indices
     socketio.emit('game_started', {
         'game_state': current_game_state.to_dict(),
         'first_player': current_game_state.current_player,
@@ -652,24 +675,16 @@ def handle_start_game(data):
     
     logger.info(f"Game started in room {room_id} with {player_count} players")
     
-    # Process first turn (might be AI)
     process_next_turn(room_id)
-
-
-# ========== Error Handlers ==========
 
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
 
-
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal error: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
-
-
-# ========== Application Startup ==========
 
 if __name__ == '__main__':
     logger.info(f"Starting Chkobba Game Server...")
