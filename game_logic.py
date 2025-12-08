@@ -139,9 +139,9 @@ class GameState:
             for capture_set in captures:
                 legal_moves.append((card, capture_set))
         
-        # If no captures possible, can play any card
-        if not legal_moves:
-            legal_moves = [(card, []) for card in hand]
+        # Players can always play any card without capturing
+        for card in hand:
+            legal_moves.append((card, []))
         
         return legal_moves
     
@@ -150,18 +150,27 @@ class GameState:
         captures = []
         card_value = card.value
         
-        # Single card capture
+        # Single card capture (1-to-1 match)
         for table_card in self.table:
             if table_card.value == card_value:
                 captures.append([table_card])
         
-        # Sum captures (2 or more cards)
-        for r in range(2, len(self.table) + 1):
-            for combo in combinations(self.table, r):
-                if sum(c.value for c in combo) == card_value:
-                    captures.append(list(combo))
+        # Sum captures (2 or more cards) - only if no 1-to-1 match exists
+        if not captures:  # Only allow combo captures if no single card match
+            for r in range(2, len(self.table) + 1):
+                for combo in combinations(self.table, r):
+                    if sum(c.value for c in combo) == card_value:
+                        captures.append(list(combo))
         
         return captures
+    
+    def _has_single_card_match(self, card: Card) -> bool:
+        """Check if card has a 1-to-1 match on the table"""
+        card_value = card.value
+        for table_card in self.table:
+            if table_card.value == card_value:
+                return True
+        return False
     
     def play_card(self, player_idx: int, card: Card, captured_cards: List[Card]) -> Dict:
         """Play a card and capture specified cards
@@ -231,31 +240,27 @@ class GameState:
     def _validate_capture(self, card: Card, captured_cards: List[Card]) -> Tuple[bool, str]:
         """Validate card capture according to Chkobba rules
         
-        MANDATORY CAPTURE RULE: If a capture is possible, player MUST capture.
-        Player can only add card to table if no captures are available.
+        Rules:
+        1. Players can skip captures (no mandatory capture)
+        2. If a 1-to-1 match exists, combo captures are NOT allowed
+        3. Captured cards must sum to card value
         """
         card_value = card.value
         
         logger.info(f"Validating capture: card={card.code} (value={card_value}), captured={[c.code for c in captured_cards]}")
         
-        # Find all possible captures for this card
-        possible_captures = self._find_captures(card)
-        
-        logger.info(f"Possible captures for {card.code}: {[[c.code for c in combo] for combo in possible_captures]}")
-        
-        # RULE: If captures are possible, player MUST capture
-        if possible_captures and not captured_cards:
-            logger.error(f"Capture is mandatory! Possible captures: {[[c.code for c in combo] for combo in possible_captures]}")
-            return False, f'You must capture when possible. Available captures: {[[c.code for c in combo] for combo in possible_captures[:3]]}'
-        
-        # No captures attempted - only valid if no captures possible
+        # No captures is always valid (players can skip captures)
         if not captured_cards:
-            if not possible_captures:
-                logger.info("No captures possible - valid to add to table")
-                return True, ''
-            else:
-                # This should never happen due to check above, but keeping for safety
-                return False, 'Capture is mandatory when possible'
+            logger.info("No captures - valid (skipping capture)")
+            return True, ''
+        
+        # Check if 1-to-1 match exists
+        has_single_match = self._has_single_card_match(card)
+        
+        # If 1-to-1 match exists and player is trying combo capture
+        if has_single_match and len(captured_cards) > 1:
+            logger.error(f"1-to-1 match exists for {card.code}, combo capture not allowed")
+            return False, f'You must capture the single matching card (not a combination) when a 1-to-1 match exists'
         
         # Convert table to codes for comparison
         table_codes = [c.code for c in self.table]
@@ -274,6 +279,7 @@ class GameState:
             return False, f'Captured cards sum ({total_value}) does not match card value ({card_value})'
         
         # Verify this is a valid capture combination
+        possible_captures = self._find_captures(card)
         captured_codes = [c.code for c in captured_cards]
         is_valid_combo = any(
             sorted([c.code for c in combo]) == sorted(captured_codes)
