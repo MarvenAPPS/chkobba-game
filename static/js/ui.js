@@ -127,6 +127,21 @@ function updateGameBoard(state) {
     gameState.current_player = state.current_player;
   }
   
+  // Update deck display and turns counter
+  if (state.deck_remaining !== undefined) {
+    if (typeof updateDeckDisplay === 'function') {
+      updateDeckDisplay(state.deck_remaining);
+    }
+    if (typeof updateTurnsRemaining === 'function') {
+      updateTurnsRemaining(state.deck_remaining, gameState.players.length);
+    }
+    
+    // Check if deck just became empty
+    if (state.deck_remaining === 0 && typeof handleDeckEmpty === 'function') {
+      handleDeckEmpty(state);
+    }
+  }
+  
   // Re-render all UI components
   renderTableCards();
   renderPlayerHand();
