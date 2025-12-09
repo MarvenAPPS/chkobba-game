@@ -189,33 +189,56 @@ const api = {
   }
 };
 
-// Message Display
-function showMessage(message, type = 'info', duration = 3000) {
-  const messageEl = document.getElementById('message');
-  if (!messageEl) return;
+// TOAST NOTIFICATION SYSTEM - Non-intrusive, fixed position
+let toastTimeout = null;
+
+function showToast(message, type = 'info', duration = 3000) {
+  // Clear existing timeout
+  if (toastTimeout) {
+    clearTimeout(toastTimeout);
+  }
   
-  messageEl.textContent = message;
-  messageEl.className = `message ${type}`;
-  messageEl.style.display = 'block';
+  // Get or create toast container
+  let toast = document.getElementById('toast-notification');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast-notification';
+    toast.className = 'toast-notification';
+    document.body.appendChild(toast);
+  }
   
-  if (duration) {
-    setTimeout(() => {
-      messageEl.style.display = 'none';
+  // Update toast
+  toast.textContent = message;
+  toast.className = `toast-notification toast-${type} toast-show`;
+  
+  // Auto-hide after duration
+  if (duration > 0) {
+    toastTimeout = setTimeout(() => {
+      toast.classList.remove('toast-show');
     }, duration);
   }
 }
 
 function showError(message) {
-  showMessage(message, 'error');
+  showToast(message, 'error', 4000);
   console.error(message);
 }
 
 function showSuccess(message) {
-  showMessage(message, 'success');
+  showToast(message, 'success', 3000);
 }
 
 function showInfo(message) {
-  showMessage(message, 'info');
+  showToast(message, 'info', 2500);
+}
+
+function showWarning(message) {
+  showToast(message, 'warning', 3500);
+}
+
+// Old message display - DEPRECATED, now using toasts
+function showMessage(message, type = 'info', duration = 3000) {
+  showToast(message, type, duration);
 }
 
 // Notification
