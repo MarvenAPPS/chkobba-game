@@ -34,6 +34,7 @@ room_players = {}  # room_id -> [player_ids] (ordered by join)
 player_id_to_index = {}  # room_id -> {player_id: game_index}
 ai_players = {}  # room_id -> {player_index: AIPlayer}
 turn_timers = {}  # room_id -> timer_thread
+room_settings = {}  # room_id -> {target_score: 11 or 21}
 
 
 def generate_room_code(length=6):
@@ -126,13 +127,20 @@ def check_round_end(room_id):
         for idx in range(game_state.num_players):
             scoring_details[idx] = get_scoring_details(game_state, idx)
         
+        # Get total scores
+        total_scores = {i: p['score'] for i, p in enumerate(game_state.players)}
+        
+        # Get target score
+        target_score = room_settings.get(room_id, {}).get('target_score', 21)
+        
         # Emit round ended event
         socketio.emit('round_ended', {
             'round_number': game_state.round_number - 1,  # Previous round number
             'round_scores': round_scores,
-            'total_scores': {i: p['score'] for i, p in enumerate(game_state.players)},
+            'total_scores': total_scores,
             'scoring_details': scoring_details,
-            'player_names': player_names
+            'player_names': player_names,
+            'target_score': target_score
         }, room=f'room_{room_id}')
         
         return True
@@ -307,7 +315,6 @@ def process_next_turn(room_id):
 
 
 # ========== HTTP Routes ========== 
-# (Previous HTTP routes remain the same - keeping them for brevity)
 
 @app.route('/')
 def index():
@@ -327,12 +334,16 @@ def create_room():
     player_name = data.get('player_name', '').strip()
     num_players = data.get('num_players', 2)
     game_mode = data.get('game_mode', '1v1_ai')
+    target_score = data.get('target_score', 21)  # Default to 21
     
     if not player_name or len(player_name) > 20:
         return jsonify({'error': 'Invalid player name'}), 400
     
     if num_players < 2 or num_players > 4:
         return jsonify({'error': 'Game must have 2-4 players'}), 400
+    
+    if target_score not in [11, 21]:
+        return jsonify({'error': 'Target score must be 11 or 21'}), 400
     
     room_code = generate_room_code()
     while db.get_room_by_code(room_code):
@@ -346,6 +357,7 @@ def create_room():
     room_players[room_id] = [player_id]
     player_id_to_index[room_id] = {player_id: 0}
     ai_players[room_id] = {}
+    room_settings[room_id] = {'target_score': target_score}
     
     if 'ai' in game_mode.lower():
         ai_difficulty = 'medium'
@@ -361,7 +373,7 @@ def create_room():
         
         logger.info(f"Created AI game room {room_code} with {ai_count} AI players")
     
-    logger.info(f"Created room {room_code} (ID: {room_id}) with player {player_name}")
+    logger.info(f"Created room {room_code} (ID: {room_id}) with player {player_name}, target score: {target_score}")
     
     return jsonify({
         'room_code': room_code,
@@ -369,6 +381,7 @@ def create_room():
         'player_id': player_id,
         'player_index': 0,
         'session_token': session_token,
+        'target_score': target_score,
         'status': 'ready' if 'ai' in game_mode.lower() else 'waiting'
     })
 
@@ -460,6 +473,7 @@ def get_room_status(room_code):
         'status': room['status'],
         'game_mode': room['game_mode'],
         'num_players': room['num_players'],
+        'target_score': room_settings.get(room_id, {}).get('target_score', 21),
         'players': [
             {
                 'id': p['id'],
@@ -497,6 +511,7 @@ def reconnect():
         'room_id': room_id,
         'player_id': player['id'],
         'player_index': player_index,
+        'target_score': room_settings.get(room_id, {}).get('target_score', 21),
         'game_state': active_games.get(room_id).to_dict() if room_id in active_games else None,
         'status': 'reconnected'
     })
@@ -656,7 +671,7 @@ def handle_start_game(data):
     
     player_count = db.get_player_count(room_id)
     if player_count < room['num_players']:
-        emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'}) 
+        emit('error', {'message': f'Waiting for players ({player_count}/{room["num_players"]})'})
         return
     
     if room_id not in active_games:
@@ -667,15 +682,114 @@ def handle_start_game(data):
     db.create_game_session(room_id, current_game_state.to_dict())
     db.update_room_status(room_id, 'started')
     
+    target_score = room_settings.get(room_id, {}).get('target_score', 21)
+    
     socketio.emit('game_started', {
         'game_state': current_game_state.to_dict(),
         'first_player': current_game_state.current_player,
+        'target_score': target_score,
         'player_mapping': player_id_to_index.get(room_id, {})
     }, room=f'room_{room_id}')
     
-    logger.info(f"Game started in room {room_id} with {player_count} players")
+    logger.info(f"Game started in room {room_id} with {player_count} players, target score: {target_score}")
     
     process_next_turn(room_id)
+
+@socketio.on('continue_game')
+def handle_continue_game(data):
+    """Handle continue to next round after round summary"""
+    session_token = data.get('session_token')
+    session_info = active_sessions.get(session_token)
+    
+    if not session_info:
+        emit('error', {'message': 'Invalid session'})
+        return
+    
+    room_id = session_info['room_id']
+    game_state = active_games.get(room_id)
+    
+    if not game_state:
+        emit('error', {'message': 'Game not found'})
+        return
+    
+    logger.info(f"Continuing game in room {room_id}, round {game_state.round_number}")
+    
+    # Broadcast game state update and start next turn
+    socketio.emit('game_state_update', {
+        'game_state': game_state.to_dict()
+    }, room=f'room_{room_id}')
+    
+    process_next_turn(room_id)
+
+@socketio.on('restart_game')
+def handle_restart_game(data):
+    """Restart game with same settings"""
+    session_token = data.get('session_token')
+    session_info = active_sessions.get(session_token)
+    
+    if not session_info:
+        emit('error', {'message': 'Invalid session'})
+        return
+    
+    room_id = session_info['room_id']
+    room = db.get_room_by_id(room_id)
+    
+    # Create new game state
+    active_games[room_id] = GameState(room['num_players'])
+    current_game_state = active_games[room_id]
+    
+    # Update database
+    db.create_game_session(room_id, current_game_state.to_dict())
+    
+    target_score = room_settings.get(room_id, {}).get('target_score', 21)
+    
+    logger.info(f"Restarting game in room {room_id}")
+    
+    # Broadcast restart
+    socketio.emit('game_restarted', {
+        'game_state': current_game_state.to_dict(),
+        'first_player': current_game_state.current_player,
+        'target_score': target_score
+    }, room=f'room_{room_id}')
+    
+    process_next_turn(room_id)
+
+@socketio.on('close_room')
+def handle_close_room(data):
+    """Close the room"""
+    session_token = data.get('session_token')
+    session_info = active_sessions.get(session_token)
+    
+    if not session_info:
+        emit('error', {'message': 'Invalid session'})
+        return
+    
+    room_id = session_info['room_id']
+    
+    # Cancel any active timers
+    if room_id in turn_timers:
+        turn_timers[room_id].cancel()
+        del turn_timers[room_id]
+    
+    # Update room status
+    db.update_room_status(room_id, 'closed')
+    
+    # Clean up
+    if room_id in active_games:
+        del active_games[room_id]
+    if room_id in room_players:
+        del room_players[room_id]
+    if room_id in player_id_to_index:
+        del player_id_to_index[room_id]
+    if room_id in ai_players:
+        del ai_players[room_id]
+    if room_id in room_settings:
+        del room_settings[room_id]
+    
+    logger.info(f"Room {room_id} closed")
+    
+    # Notify all players
+    socketio.emit('room_closed', {}, room=f'room_{room_id}')
 
 @app.errorhandler(404)
 def not_found(error):
