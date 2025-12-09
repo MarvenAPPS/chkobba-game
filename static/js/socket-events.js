@@ -31,10 +31,12 @@ socket.on('error', (error) => {
 // All player updates are now handled by player_update event
 
 socket.on('player_update', (data) => {
-  console.log('Player update:', data);
+  console.log('Player update event received:', data);
   
-  // Update players list
+  // CRITICAL FIX: Always REPLACE the entire players array from backend
+  // Never append or merge - backend sends complete list
   if (data.players) {
+    console.log('Replacing players list with:', data.players);
     gameState.players = data.players;
     updatePlayersList();
   }
@@ -48,6 +50,7 @@ socket.on('player_update', (data) => {
 socket.on('player_list', (data) => {
   console.log('Player list received:', data);
   if (data.players) {
+    // REPLACE entire player list
     gameState.players = data.players;
     updatePlayersList();
   }
