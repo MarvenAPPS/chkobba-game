@@ -27,20 +27,20 @@ socket.on('error', (error) => {
 
 // ========== Room Events ==========
 
-socket.on('player_joined', (data) => {
-  console.log('Player joined:', data);
-  updatePlayersList();
-  showInfo(`${data.player_name} joined the room`);
-});
+// REMOVED: player_joined handler to prevent duplicates
+// All player updates are now handled by player_update event
 
 socket.on('player_update', (data) => {
   console.log('Player update:', data);
+  
+  // Update players list
   if (data.players) {
     gameState.players = data.players;
+    updatePlayersList();
   }
-  updatePlayersList();
   
-  if (data.action === 'joined') {
+  // Show notification only for JOIN action (not for other updates)
+  if (data.action === 'joined' && data.player) {
     showInfo(`${data.player.name} joined the room`);
   }
 });
@@ -87,7 +87,7 @@ socket.on('game_started', (data) => {
   
   // Play turn sound if it's our turn
   const isMyTurn = data.game_state.current_player === gameState.player_index;
-  if (isMyTurn) {
+  if (isMyTurn && typeof audioManager !== 'undefined') {
     audioManager.play('turn');
   }
 });
@@ -104,7 +104,9 @@ socket.on('game_state_update', (data) => {
 
 socket.on('card_played', (data) => {
   console.log('Card played:', data);
-  audioManager.play('card_play');
+  if (typeof audioManager !== 'undefined') {
+    audioManager.play('card_play');
+  }
   
   // Update game board with new state
   updateGameBoard(data.game_state);
@@ -114,12 +116,16 @@ socket.on('card_played', (data) => {
   }
   
   if (data.is_chkobba) {
-    audioManager.play('chkobba');
+    if (typeof audioManager !== 'undefined') {
+      audioManager.play('chkobba');
+    }
     showSuccess('🎉 Chkobba! All cards captured!');
   }
   
   if (data.is_haya) {
-    audioManager.play('haya');
+    if (typeof audioManager !== 'undefined') {
+      audioManager.play('haya');
+    }
     showSuccess('🏆 Haya! 7 of Diamonds captured!');
   }
   
@@ -133,7 +139,9 @@ socket.on('card_played', (data) => {
   const isNowMyTurn = gameState.current_player === gameState.player_index;
   const wasMyTurn = previousPlayer === gameState.player_index;
   if (isNowMyTurn && !wasMyTurn) {
-    audioManager.play('turn');
+    if (typeof audioManager !== 'undefined') {
+      audioManager.play('turn');
+    }
     showInfo('🔔 Your turn!');
   }
 });
@@ -154,7 +162,9 @@ socket.on('turn_changed', (data) => {
   const isNowMyTurn = gameState.current_player === gameState.player_index;
   const wasMyTurn = previousPlayer === gameState.player_index;
   if (isNowMyTurn && !wasMyTurn) {
-    audioManager.play('turn');
+    if (typeof audioManager !== 'undefined') {
+      audioManager.play('turn');
+    }
     showInfo('🔔 Your turn!');
   }
   
@@ -165,8 +175,10 @@ socket.on('turn_changed', (data) => {
 
 socket.on('timeout_warning', (data) => {
   console.log('Timeout warning:', data.seconds);
-  audioManager.play('timeout');
-  showInfo(`⏱️ ${data.seconds} seconds remaining!`);
+  if (typeof audioManager !== 'undefined') {
+    audioManager.play('timeout');
+  }
+  showWarning(`⏱️ ${data.seconds} seconds remaining!`);
 });
 
 socket.on('auto_played', (data) => {
@@ -266,7 +278,7 @@ socket.on('game_restarted', (data) => {
   
   // Play turn sound if it's our turn
   const isMyTurn = data.game_state.current_player === gameState.player_index;
-  if (isMyTurn) {
+  if (isMyTurn && typeof audioManager !== 'undefined') {
     audioManager.play('turn');
   }
 });
