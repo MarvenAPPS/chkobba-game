@@ -71,6 +71,15 @@
                         </select>
                     </div>
 
+                    <div class="form-group">
+                        <label for="target-score">Target Score</label>
+                        <select id="target-score">
+                            <option value="11">11 Points (Quick Game)</option>
+                            <option value="21" selected>21 Points (Standard)</option>
+                        </select>
+                        <small class="form-hint">First player to reach this score wins!</small>
+                    </div>
+
                     <div class="button-group">
                         <button type="submit" class="btn btn-primary">Create Room</button>
                         <button type="button" class="btn btn-outline" onclick="goBack()">Back</button>
