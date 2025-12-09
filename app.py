@@ -233,6 +233,12 @@ def start_turn_timer(room_id):
         if not game_state:
             return
         
+        # CRITICAL: Don't trigger if game hasn't started or is finished
+        room = db.get_room_by_id(room_id)
+        if room['status'] != 'started':
+            logger.info(f"Timer cancelled - game not started in room {room_id}")
+            return
+        
         current_player_idx = game_state.current_player
         
         # Don't auto-play for AI (they have their own trigger)
@@ -283,17 +289,30 @@ def start_turn_timer(room_id):
     if room_id in turn_timers:
         turn_timers[room_id].cancel()
     
+    # CRITICAL: Only start timer if game has actually started
+    room = db.get_room_by_id(room_id)
+    if room['status'] != 'started':
+        logger.info(f"Skipping timer start - game not started yet in room {room_id}")
+        return
+    
     # Start new timer
     timer = threading.Timer(10.0, timeout_handler)
     timer.daemon = True
     timer.start()
     turn_timers[room_id] = timer
+    logger.info(f"Started turn timer for room {room_id}")
 
 
 def process_next_turn(room_id):
     """Process turn change and trigger AI/timer as needed"""
     game_state = active_games.get(room_id)
     if not game_state:
+        return
+    
+    # CRITICAL: Only process turns if game has started
+    room = db.get_room_by_id(room_id)
+    if room['status'] != 'started':
+        logger.info(f"Skipping turn processing - game not started in room {room_id}")
         return
     
     current_player_idx = game_state.current_player
@@ -429,6 +448,8 @@ def join_room_endpoint():
     
     players = db.get_players_by_room(room_id)
     
+    # FIXED: Emit to room AFTER player joins (they'll receive it via socket)
+    # NOTE: This will be received by all players already in the room via WebSocket
     socketio.emit('player_update', {
         'action': 'joined',
         'player': {
@@ -524,7 +545,7 @@ def get_theme():
         'board_theme': settings['board_theme']
     })
 
-@app.route('/api/admin/theme/set', methods=['POST'])
+@app.route('/api/settings/theme/set', methods=['POST'])
 def set_theme():
     data = request.json
     card_theme = data.get('card_theme')
@@ -587,6 +608,7 @@ def handle_join_game(data):
             'your_index': player_index
         })
     
+    # Send complete player list to the joining player
     emit('player_list', {
         'players': [
             {'id': p['id'], 'name': p['player_name'], 'is_ai': bool(p['is_ai'])}
@@ -612,8 +634,10 @@ def handle_play_card(data):
     room_id = session_info['room_id']
     player_index = session_info['game_index']
     
+    # Cancel turn timer
     if room_id in turn_timers:
         turn_timers[room_id].cancel()
+        logger.info(f"Cancelled timer for room {room_id}")
     
     game_state = active_games.get(room_id)
     if not game_state:
@@ -693,6 +717,7 @@ def handle_start_game(data):
     
     logger.info(f"Game started in room {room_id} with {player_count} players, target score: {target_score}")
     
+    # Now it's safe to process turns
     process_next_turn(room_id)
 
 @socketio.on('continue_game')
