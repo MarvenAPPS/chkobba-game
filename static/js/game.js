@@ -8,18 +8,22 @@ async function createRoom() {
   const playerName = document.getElementById('player-name-create').value.trim();
   const numPlayers = parseInt(document.getElementById('num-players').value);
   const gameMode = document.getElementById('game-mode').value;
+  const targetScore = parseInt(document.getElementById('target-score').value);
   
   if (!playerName) {
     showError('Please enter your name');
     return;
   }
   
+  console.log('Creating room with target score:', targetScore);
+  
   try {
     showInfo('Creating room...');
     const response = await api.post('/api/room/create', {
       player_name: playerName,
       num_players: numPlayers,
-      game_mode: gameMode
+      game_mode: gameMode,
+      target_score: targetScore
     });
     
     gameState.room_code = response.room_code;
@@ -27,9 +31,10 @@ async function createRoom() {
     gameState.player_id = response.player_id;
     gameState.player_index = response.player_index || 0;  // Store player index
     gameState.session_token = response.session_token;
+    gameState.target_score = response.target_score || targetScore;
     gameState.save();
     
-    console.log('Created room, player_index:', gameState.player_index);
+    console.log('Created room, player_index:', gameState.player_index, 'target_score:', gameState.target_score);
     
     // Join room via WebSocket
     emitJoinGame();
@@ -39,7 +44,7 @@ async function createRoom() {
     document.getElementById('room-code-display').textContent = response.room_code;
     updatePlayersList();
     
-    showSuccess(`Room created: ${response.room_code}`);
+    showSuccess(`Room created: ${response.room_code} (Target: ${gameState.target_score} pts)`);
   } catch (error) {
     showError(`Failed to create room: ${error.message}`);
   }
@@ -190,6 +195,7 @@ async function reconnectSession() {
     gameState.player_id = response.player_id;
     gameState.player_index = response.player_index;  // Restore player index
     gameState.session_token = token;
+    gameState.target_score = response.target_score || 21;
     
     if (response.game_state) {
       showScreen('game-screen');
