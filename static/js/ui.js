@@ -57,7 +57,16 @@ function renderPlayerHand() {
   gameState.player_hand.forEach(card => {
     const isSelected = gameState.selected_card === card;
     const cardEl = renderCard(card, true, isSelected, false);
+    
+    // Single click to select
     cardEl.addEventListener('click', () => selectCard(card));
+    
+    // Double click to auto-play
+    cardEl.addEventListener('dblclick', () => {
+      selectCard(card);
+      setTimeout(() => playCard(), 100);
+    });
+    
     container.appendChild(cardEl);
   });
 }
@@ -98,6 +107,35 @@ function updateScoreboard() {
   });
 }
 
+function updateDeckDisplay(deckRemaining) {
+  const deckCountEl = document.getElementById('deck-count');
+  if (deckCountEl) {
+    deckCountEl.textContent = deckRemaining;
+  }
+  
+  // Update deck visual (hide cards as deck empties)
+  const deckCards = document.querySelectorAll('.deck-card');
+  if (deckRemaining === 0) {
+    deckCards.forEach(card => card.style.opacity = '0');
+  } else if (deckRemaining <= 10) {
+    if (deckCards[2]) deckCards[2].style.opacity = '0';
+  } else if (deckRemaining <= 20) {
+    if (deckCards[1]) deckCards[1].style.opacity = '0.5';
+  }
+}
+
+function updateTurnsRemaining(deckRemaining, numPlayers) {
+  const turnsEl = document.getElementById('turns-remaining');
+  if (!turnsEl) return;
+  
+  // Each player gets 3 cards per deal
+  // Turns = (deck / (numPlayers * 3)) * numPlayers
+  const dealsRemaining = Math.floor(deckRemaining / (numPlayers * 3));
+  const turnsRemaining = dealsRemaining * numPlayers;
+  
+  turnsEl.textContent = `Turns: ${turnsRemaining}`;
+}
+
 function updateGameBoard(state) {
   console.log('Updating game board with state:', state);
   console.log('Player index:', gameState.player_index);
@@ -129,17 +167,8 @@ function updateGameBoard(state) {
   
   // Update deck display and turns counter
   if (state.deck_remaining !== undefined) {
-    if (typeof updateDeckDisplay === 'function') {
-      updateDeckDisplay(state.deck_remaining);
-    }
-    if (typeof updateTurnsRemaining === 'function') {
-      updateTurnsRemaining(state.deck_remaining, gameState.players.length);
-    }
-    
-    // Check if deck just became empty
-    if (state.deck_remaining === 0 && typeof handleDeckEmpty === 'function') {
-      handleDeckEmpty(state);
-    }
+    updateDeckDisplay(state.deck_remaining);
+    updateTurnsRemaining(state.deck_remaining, gameState.players.length);
   }
   
   // Re-render all UI components
@@ -277,17 +306,18 @@ function selectCard(card) {
   } else {
     gameState.selected_card = card;
     
-    // Auto-detect captures for convenience (but allow skipping)
+    // AUTO-CAPTURE: Always capture if possible
     const captureCombos = findAllCaptureCombinations(card, gameState.table_cards);
     
     if (captureCombos.length === 1) {
-      // Only one way to capture - auto-select it
+      // Only one way to capture - FORCE auto-select
       gameState.captured_cards = [...captureCombos[0]];
-      showInfo(`Auto-selected capture: ${captureCombos[0].join(', ')} (you can deselect to skip)`);
+      console.log('Auto-captured (only option):', captureCombos[0]);
     } else if (captureCombos.length > 1) {
-      // Multiple options - clear selection and let user choose
-      gameState.captured_cards = [];
-      showInfo(`Multiple capture options available - select table cards or skip`);
+      // Multiple options - auto-select first option, but user can change
+      gameState.captured_cards = [...captureCombos[0]];
+      showInfo(`Multiple captures possible - click table cards to change selection`);
+      console.log('Auto-selected first option:', captureCombos[0], 'from', captureCombos.length, 'options');
     } else {
       // No captures possible - clear selection
       gameState.captured_cards = [];
@@ -319,6 +349,16 @@ function toggleCapturedCard(card) {
     return;
   }
   
+  // Get all valid combinations
+  const captureCombos = findAllCaptureCombinations(gameState.selected_card, gameState.table_cards);
+  
+  // If only one combo exists, don't allow deselection
+  if (captureCombos.length === 1) {
+    showInfo('This is the only valid capture - cannot deselect');
+    return;
+  }
+  
+  // Toggle card in selection
   const idx = gameState.captured_cards.indexOf(card);
   if (idx >= 0) {
     gameState.captured_cards.splice(idx, 1);
