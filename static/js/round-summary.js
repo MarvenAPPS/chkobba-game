@@ -101,10 +101,9 @@ function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores,
         </div>
     `;
   } else {
-    // Game continues - show target score and continue button
+    // Game continues - NO AUTO-CLOSE, only manual continue
     tableHTML += `
         <p class="continue-message">Target Score: <strong>${targetScore} points</strong> • Highest: <strong>${maxScore} points</strong></p>
-        <p class="auto-close-msg">Continuing in <span id="countdown">8</span> seconds...</p>
         <button class="btn-primary" onclick="closeRoundSummary()">Continue Next Round</button>
     `;
   }
@@ -118,35 +117,11 @@ function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores,
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   
-  // Only auto-close if game is not ended
-  if (!gameEnded) {
-    let countdown = 8;
-    const countdownEl = document.getElementById('countdown');
-    
-    const timer = setInterval(() => {
-      countdown--;
-      if (countdownEl) {
-        countdownEl.textContent = countdown;
-      }
-      
-      if (countdown <= 0) {
-        clearInterval(timer);
-        closeRoundSummary();
-      }
-    }, 1000);
-    
-    // Store timer so we can cancel if manually closed
-    window.roundSummaryTimer = timer;
-  }
+  // NO AUTO-CLOSE TIMER - User must manually click Continue or Close
+  console.log('Round summary displayed - waiting for user action');
 }
 
 function closeRoundSummary() {
-  // Clear auto-close timer
-  if (window.roundSummaryTimer) {
-    clearInterval(window.roundSummaryTimer);
-    window.roundSummaryTimer = null;
-  }
-  
   // Remove overlay
   const overlay = document.getElementById('round-summary-overlay');
   if (overlay) {
@@ -326,24 +301,13 @@ if (!document.getElementById('round-summary-styles')) {
     .continue-message {
       color: #666;
       font-size: 16px;
-      margin-bottom: 10px;
+      margin-bottom: 15px;
       padding: 10px;
       background: #f0f0f0;
       border-radius: 6px;
     }
     
     .continue-message strong {
-      color: #667eea;
-    }
-    
-    .auto-close-msg {
-      color: #666;
-      font-size: 14px;
-      margin-bottom: 15px;
-    }
-    
-    .auto-close-msg #countdown {
-      font-weight: bold;
       color: #667eea;
     }
     
