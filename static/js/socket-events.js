@@ -57,11 +57,23 @@ socket.on('room_full', (data) => {
   showError('Room is full');
 });
 
+socket.on('room_closed', (data) => {
+  showInfo('Room has been closed');
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 2000);
+});
+
 // ========== Game Events ==========
 
 socket.on('game_started', (data) => {
   console.log('Game started:', data);
   gameState.game_status = 'active';
+  
+  // Store target score
+  if (data.target_score) {
+    gameState.target_score = data.target_score;
+  }
   
   // Update player index from mapping if provided
   if (data.player_mapping && gameState.player_id) {
@@ -178,16 +190,46 @@ socket.on('round_ended', (data) => {
   // Update scoreboard
   updateScoreboard();
   
-  // Show round summary with all data from backend
+  // Show round summary with all data from backend including total_scores and target_score
   if (typeof showRoundSummary === 'function') {
     showRoundSummary(
       data.round_scores,
       data.scoring_details,
-      data.player_names
+      data.player_names,
+      data.total_scores,
+      data.target_score || 21,
+      data.round_number
     );
   } else {
     console.error('showRoundSummary function not found');
     showInfo('🏁 Round ended!');
+  }
+});
+
+socket.on('game_restarted', (data) => {
+  console.log('Game restarted:', data);
+  
+  // Store target score
+  if (data.target_score) {
+    gameState.target_score = data.target_score;
+  }
+  
+  // Reset game state
+  gameState.game_status = 'active';
+  gameState.current_player = data.first_player;
+  gameState.scores = {};
+  gameState.save();
+  
+  // Update game board
+  updateGameBoard(data.game_state);
+  updateScoreboard();
+  
+  showInfo('🔄 Game restarted!');
+  
+  // Play turn sound if it's our turn
+  const isMyTurn = data.game_state.current_player === gameState.player_index;
+  if (isMyTurn) {
+    audioManager.play('turn');
   }
 });
 
