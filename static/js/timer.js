@@ -97,25 +97,25 @@ class TimerManager {
   }
 
   showWarning() {
-    if (typeof showInfo === 'function') {
-      showInfo(`⏱️ 5 seconds remaining!`);
+    if (typeof showWarning === 'function') {
+      showWarning(`⏱️ 5 seconds remaining!`);
     }
   }
 
   timeout() {
-    console.log('Timer expired - auto-playing');
+    console.log('Timer expired - triggering auto-play');
     this.stop();
     
-    if (typeof showError === 'function') {
-      showError('⏰ Time\'s up! Auto-playing...');
+    if (typeof showWarning === 'function') {
+      showWarning('⏰ Time\'s up! Auto-playing...');
     }
     
-    // Auto-play after short delay
-    setTimeout(() => {
-      if (typeof autoPlay === 'function') {
-        autoPlay();
-      }
-    }, 500);
+    // FIXED: Auto-play immediately, not after delay
+    if (typeof autoPlay === 'function') {
+      autoPlay();
+    } else {
+      console.error('autoPlay function not defined!');
+    }
   }
 
   stop() {
@@ -174,9 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
   timerManager.init();
 });
 
-// Auto-play function
+// FIXED Auto-play function - properly checks for captures
 function autoPlay() {
-  console.log('Auto-play triggered');
+  console.log('Auto-play triggered by timeout');
   
   const isMyTurn = (gameState.current_player === gameState.player_index) ||
                    (gameState.current_player === gameState.player_id);
@@ -191,11 +191,39 @@ function autoPlay() {
     return;
   }
   
-  // Simple strategy: play first card with no captures
-  const card = gameState.player_hand[0];
-  console.log('Auto-playing card:', card);
+  // Find a card that can be played without capturing (if possible)
+  let cardToPlay = null;
+  let captureCards = [];
   
-  if (typeof emitPlayCard === 'function') {
-    emitPlayCard(card, []);
+  // Try to find a card that CANNOT capture anything
+  for (const card of gameState.player_hand) {
+    const captureCombos = findAllCaptureCombinations(card, gameState.table_cards);
+    if (captureCombos.length === 0) {
+      // This card cannot capture - safe to play
+      cardToPlay = card;
+      captureCards = [];
+      console.log('Auto-playing non-capturing card:', card);
+      break;
+    }
+  }
+  
+  // If all cards can capture, play first card with its required capture
+  if (!cardToPlay) {
+    cardToPlay = gameState.player_hand[0];
+    const captureCombos = findAllCaptureCombinations(cardToPlay, gameState.table_cards);
+    
+    if (captureCombos.length > 0) {
+      // MUST capture with this card
+      captureCards = captureCombos[0];
+      console.log('Auto-playing with mandatory capture:', cardToPlay, 'capturing:', captureCards);
+    } else {
+      console.log('Auto-playing card without capture:', cardToPlay);
+    }
+  }
+  
+  if (cardToPlay && typeof emitPlayCard === 'function') {
+    emitPlayCard(cardToPlay, captureCards);
+  } else {
+    console.error('Cannot auto-play: emitPlayCard not available');
   }
 }

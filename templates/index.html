@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.css') }}?v={{ range(1, 10000) | random }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}?v={{ range(1, 10000) | random }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/deck-and-modal.css') }}?v={{ range(1, 10000) | random }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/toast.css') }}?v={{ range(1, 10000) | random }}">
 </head>
 <body>
     <div class="app-container">
@@ -227,13 +228,12 @@
                         <div id="player-hand" class="hand-display"></div>
                     </div>
 
-                    <!-- Action Panel -->
+                    <!-- Action Panel - NO MESSAGE DIV HERE ANYMORE -->
                     <div class="action-panel">
                         <div id="action-buttons">
                             <button class="btn btn-primary btn-lg" id="play-btn" onclick="playCard()" disabled>Select a Card</button>
                             <button class="btn btn-outline" id="clear-btn" onclick="clearSelection()">Clear Selection</button>
                         </div>
-                        <div id="message" class="message"></div>
                     </div>
                 </div>
 
@@ -276,8 +276,7 @@
             </div>
         </div>
 
-        <!-- Notification Toast -->
-        <div id="notification" class="notification"></div>
+        <!-- Toast Notification Container (created dynamically) -->
     </div>
 
     <!-- Scripts with cache busting -->
