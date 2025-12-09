@@ -117,7 +117,7 @@ class GameState:
         
         # Deal 4 cards to table
         self.table = self.deck.draw(4)
-        logger.info(f"Game setup complete. Table: {[c.code for c in self.table]}")
+        logger.info(f"Game setup complete. Table: {[c.code for c in self.table]}, Deck remaining: {self.deck.remaining()}")
     
     def _deal_new_hands(self):
         """Deal new hands to all players (3 cards each)"""
@@ -344,6 +344,8 @@ class GameState:
     
     def end_round(self) -> Dict:
         """Calculate scores for current round"""
+        logger.info(f"=== END OF ROUND {self.round_number} ===")
+        
         # Give remaining table cards to last capturer
         if self.table and self.last_capturer is not None:
             logger.info(f"Giving {len(self.table)} remaining table cards to player {self.last_capturer}")
@@ -355,20 +357,35 @@ class GameState:
         
         # Add round scores to player totals
         for idx, round_score in scores.items():
+            old_score = self.players[idx]['score']
             self.players[idx]['score'] += round_score
+            logger.info(f"Player {idx}: {old_score} + {round_score} = {self.players[idx]['score']}")
             if self.players[idx]['score'] >= Config.WINNING_SCORE:
                 self.is_finished = True
                 self.winner = idx
         
         # Reset for next round if not finished
         if not self.is_finished:
+            logger.info(f"Starting next round {self.round_number + 1}")
             self.round_number += 1
             self.table = []
+            self.last_capturer = None
+            
+            # CRITICAL FIX: Create a NEW deck for the new round
+            self.deck = Deck()
+            logger.info(f"NEW DECK created with {self.deck.remaining()} cards")
+            
+            # Reset player round data
             for player in self.players:
                 player['hand'] = []
                 player['round_captures'] = []
                 player['chkobba_count'] = 0
+                # Keep captured_cards and score for game tracking
+            
+            # Setup new round
             self._setup_game()
+        else:
+            logger.info(f"Game finished! Winner: Player {self.winner}")
         
         return scores
     
@@ -376,13 +393,15 @@ class GameState:
         """Calculate scores for current round based on Chkobba rules
         
         Scoring criteria:
-        1. Most Cards (27+ out of 40): 1 point
+        1. Most Cards (21+ out of 40): 1 point
         2. Most Diamonds: 1 point
         3. 7 of Diamonds (Haya): 1 point
         4. 7 of Clubs (Dinari): 1 point
         5. Each Chkobba: 1 point
         """
         round_scores = {i: 0 for i in range(self.num_players)}
+        
+        logger.info(f"\n=== SCORING ROUND {self.round_number} ===")
         
         # Count cards and diamonds for each player
         card_counts = {}
@@ -391,43 +410,49 @@ class GameState:
         for idx, player in enumerate(self.players):
             card_counts[idx] = len(player['round_captures'])
             diamond_counts[idx] = sum(1 for c in player['round_captures'] if c.suit == 'D')
+            logger.info(f"Player {idx}: {card_counts[idx]} cards, {diamond_counts[idx]} diamonds, {player['chkobba_count']} chkobbas")
+            logger.info(f"  Round captures: {[c.code for c in player['round_captures']]}")
         
-        # 1. Most Cards (27+ for 2 players, need majority for more players)
+        # 1. Most Cards (21+ out of 40)
         max_cards = max(card_counts.values())
         winners = [idx for idx, count in card_counts.items() if count == max_cards]
         if len(winners) == 1 and card_counts[winners[0]] >= 21:  # No tie
             round_scores[winners[0]] += 1
-            logger.info(f"Player {winners[0]} gets 1 point for most cards ({card_counts[winners[0]]})")
+            logger.info(f"✓ Player {winners[0]} gets 1 point for most cards ({card_counts[winners[0]]})")
+        else:
+            logger.info(f"✗ No point for most cards (max={max_cards}, winners={winners})")
         
         # 2. Most Diamonds
-        max_diamonds = max(diamond_counts.values())
+        max_diamonds = max(diamond_counts.values()) if diamond_counts else 0
         winners = [idx for idx, count in diamond_counts.items() if count == max_diamonds]
         if len(winners) == 1 and diamond_counts[winners[0]] > 0:  # No tie
             round_scores[winners[0]] += 1
-            logger.info(f"Player {winners[0]} gets 1 point for most diamonds ({diamond_counts[winners[0]]})")
+            logger.info(f"✓ Player {winners[0]} gets 1 point for most diamonds ({diamond_counts[winners[0]]})")
+        else:
+            logger.info(f"✗ No point for most diamonds (max={max_diamonds}, winners={winners})")
         
         # 3. 7 of Diamonds (Haya)
         haya = Card('7', 'D')
         for idx, player in enumerate(self.players):
             if haya in player['round_captures']:
                 round_scores[idx] += 1
-                logger.info(f"Player {idx} gets 1 point for 7 of Diamonds (Haya)")
+                logger.info(f"✓ Player {idx} gets 1 point for 7 of Diamonds (Haya)")
         
         # 4. 7 of Clubs (Dinari)
         dinari = Card('7', 'C')
         for idx, player in enumerate(self.players):
             if dinari in player['round_captures']:
                 round_scores[idx] += 1
-                logger.info(f"Player {idx} gets 1 point for 7 of Clubs (Dinari)")
+                logger.info(f"✓ Player {idx} gets 1 point for 7 of Clubs (Dinari)")
         
         # 5. Chkobbas
         for idx, player in enumerate(self.players):
             chkobba_points = player['chkobba_count']
             round_scores[idx] += chkobba_points
             if chkobba_points > 0:
-                logger.info(f"Player {idx} gets {chkobba_points} points for {chkobba_points} Chkobba(s)")
+                logger.info(f"✓ Player {idx} gets {chkobba_points} points for {chkobba_points} Chkobba(s)")
         
-        logger.info(f"Round {self.round_number} scores: {round_scores}")
+        logger.info(f"\nFINAL Round {self.round_number} scores: {round_scores}")
         return round_scores
     
     def next_turn(self):
