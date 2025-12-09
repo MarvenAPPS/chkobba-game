@@ -59,12 +59,21 @@ function renderPlayerHand() {
     const cardEl = renderCard(card, true, isSelected, false);
     
     // Single click to select
-    cardEl.addEventListener('click', () => selectCard(card));
-    
-    // Double click to auto-play
-    cardEl.addEventListener('dblclick', () => {
+    cardEl.addEventListener('click', (e) => {
+      e.stopPropagation();
       selectCard(card);
-      setTimeout(() => playCard(), 100);
+    });
+    
+    // FIXED: Double click to auto-play with proper event parameter
+    cardEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      console.log('Double-click detected on card:', card);
+      selectCard(card);
+      setTimeout(() => {
+        console.log('Auto-playing after double-click');
+        playCard();
+      }, 100);
     });
     
     container.appendChild(cardEl);
