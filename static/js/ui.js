@@ -84,8 +84,25 @@ function updatePlayersList() {
   const container = document.getElementById('players-list');
   if (!container) return;
   
-  container.innerHTML = '';
+  console.log('Updating players list. Current players:', gameState.players);
+  
+  // FIXED: Deduplicate players by ID before rendering
+  const uniquePlayers = [];
+  const seenIds = new Set();
+  
   gameState.players.forEach(player => {
+    if (!seenIds.has(player.id)) {
+      uniquePlayers.push(player);
+      seenIds.add(player.id);
+    } else {
+      console.warn('Duplicate player detected:', player);
+    }
+  });
+  
+  console.log('Unique players after deduplication:', uniquePlayers);
+  
+  container.innerHTML = '';
+  uniquePlayers.forEach(player => {
     const div = document.createElement('div');
     div.className = 'player-item';
     div.innerHTML = `
@@ -148,6 +165,7 @@ function updateTurnsRemaining(deckRemaining, numPlayers) {
 function updateGameBoard(state) {
   console.log('Updating game board with state:', state);
   console.log('Player index:', gameState.player_index);
+  console.log('Game status:', gameState.game_status);
   
   // Update table cards
   gameState.table_cards = state.table || [];
@@ -186,12 +204,16 @@ function updateGameBoard(state) {
   updateScoreboard();
   updateCurrentTurn();
   
-  // Start timer if it's our turn
+  // FIXED: Only start timer if game is ACTIVE and it's our turn
   const isMyTurn = (gameState.current_player === gameState.player_index) ||
                    (gameState.current_player === gameState.player_id);
-  if (isMyTurn && gameState.player_hand.length > 0) {
+  
+  // Critical check: only start timer during active gameplay
+  if (gameState.game_status === 'active' && isMyTurn && gameState.player_hand.length > 0) {
+    console.log('Starting timer - game is active and it\'s my turn');
     timerManager.start();
   } else {
+    console.log('NOT starting timer. game_status:', gameState.game_status, 'isMyTurn:', isMyTurn, 'hand:', gameState.player_hand.length);
     timerManager.stop();
   }
   
