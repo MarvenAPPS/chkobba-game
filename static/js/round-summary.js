@@ -2,8 +2,8 @@
  * Round Summary Display Component
  */
 
-function showRoundSummary(roundScores, scoringDetails, playerNames) {
-  console.log('Showing round summary:', { roundScores, scoringDetails, playerNames });
+function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores, targetScore, roundNumber) {
+  console.log('Showing round summary:', { roundScores, scoringDetails, playerNames, totalScores, targetScore });
   
   // PAUSE GAME - stop timer and disable play button
   if (typeof timerManager !== 'undefined') {
@@ -22,10 +22,15 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
   const modal = document.createElement('div');
   modal.className = 'round-summary-modal';
   
+  // Check if anyone reached target score
+  const maxScore = Math.max(...Object.values(totalScores));
+  const gameEnded = maxScore >= targetScore;
+  const winners = gameEnded ? Object.keys(totalScores).filter(idx => totalScores[idx] === maxScore) : [];
+  
   // Build table HTML
   let tableHTML = `
     <div class="modal-header">
-      <h2>🏆 Round Complete!</h2>
+      <h2>${gameEnded ? '🎉 Game Over!' : `🏆 Round ${roundNumber} Complete!`}</h2>
       <button class="close-btn" onclick="closeRoundSummary()">&times;</button>
     </div>
     <div class="modal-body">
@@ -38,7 +43,8 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
             <th>Haya (7♦)</th>
             <th>Dinari (7♣)</th>
             <th>Chkobba</th>
-            <th>Total</th>
+            <th>Round Pts</th>
+            <th>Total Score</th>
           </tr>
         </thead>
         <tbody>
@@ -50,7 +56,12 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
   for (let idx = 0; idx < numPlayers; idx++) {
     const playerName = playerNames && playerNames[idx] ? playerNames[idx] : `Player ${idx + 1}`;
     const details = scoringDetails[idx] || {};
-    const score = roundScores[idx] || 0;
+    const roundScore = roundScores[idx] || 0;
+    const totalScore = totalScores[idx] || 0;
+    
+    // Highlight winner(s)
+    const isWinner = gameEnded && winners.includes(String(idx));
+    const rowClass = isWinner ? 'winner-row' : '';
     
     // Build cells with checkmarks or dashes
     const cardsCell = details.most_cards ? `<span class="check">✅</span> 1pt` : `<span class="info">${details.total_cards || 0} cards</span>`;
@@ -60,14 +71,15 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
     const chkobbaCell = details.chkobba_count > 0 ? `<span class="check">✅</span> ${details.chkobba_count}pt` : '-';
     
     tableHTML += `
-      <tr>
-        <td><strong>${playerName}</strong></td>
+      <tr class="${rowClass}">
+        <td><strong>${playerName}${isWinner ? ' 👑' : ''}</strong></td>
         <td>${cardsCell}</td>
         <td>${diamondsCell}</td>
         <td>${hayaCell}</td>
         <td>${dinariCell}</td>
         <td>${chkobbaCell}</td>
-        <td><strong>${score} pts</strong></td>
+        <td><strong>+${roundScore}</strong></td>
+        <td class="total-score"><strong>${totalScore}</strong></td>
       </tr>
     `;
   }
@@ -76,8 +88,28 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
         </tbody>
       </table>
       <div class="modal-footer">
-        <p class="auto-close-msg">Starting next round in <span id="countdown">8</span> seconds...</p>
-        <button class="btn-primary" onclick="closeRoundSummary()">Continue</button>
+  `;
+  
+  if (gameEnded) {
+    // Game ended - show winner message and options
+    const winnerNames = winners.map(idx => playerNames[idx] || `Player ${parseInt(idx) + 1}`).join(' & ');
+    tableHTML += `
+        <p class="winner-message">🎊 ${winnerNames} reached ${targetScore} points and won the game! 🎊</p>
+        <div class="button-group">
+          <button class="btn-secondary" onclick="closeRoom()">Close Room</button>
+          <button class="btn-primary" onclick="restartGame()">Play Again</button>
+        </div>
+    `;
+  } else {
+    // Game continues - show target score and continue button
+    tableHTML += `
+        <p class="continue-message">Target Score: <strong>${targetScore} points</strong> • Highest: <strong>${maxScore} points</strong></p>
+        <p class="auto-close-msg">Continuing in <span id="countdown">8</span> seconds...</p>
+        <button class="btn-primary" onclick="closeRoundSummary()">Continue Next Round</button>
+    `;
+  }
+  
+  tableHTML += `
       </div>
     </div>
   `;
@@ -86,24 +118,26 @@ function showRoundSummary(roundScores, scoringDetails, playerNames) {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   
-  // Auto-dismiss after 8 seconds
-  let countdown = 8;
-  const countdownEl = document.getElementById('countdown');
-  
-  const timer = setInterval(() => {
-    countdown--;
-    if (countdownEl) {
-      countdownEl.textContent = countdown;
-    }
+  // Only auto-close if game is not ended
+  if (!gameEnded) {
+    let countdown = 8;
+    const countdownEl = document.getElementById('countdown');
     
-    if (countdown <= 0) {
-      clearInterval(timer);
-      closeRoundSummary();
-    }
-  }, 1000);
-  
-  // Store timer so we can cancel if manually closed
-  window.roundSummaryTimer = timer;
+    const timer = setInterval(() => {
+      countdown--;
+      if (countdownEl) {
+        countdownEl.textContent = countdown;
+      }
+      
+      if (countdown <= 0) {
+        clearInterval(timer);
+        closeRoundSummary();
+      }
+    }, 1000);
+    
+    // Store timer so we can cancel if manually closed
+    window.roundSummaryTimer = timer;
+  }
 }
 
 function closeRoundSummary() {
@@ -119,11 +153,40 @@ function closeRoundSummary() {
     overlay.remove();
   }
   
-  // Re-enable game (timer will start on next turn)
-  const playBtn = document.getElementById('play-btn');
-  if (playBtn) {
-    // Don't re-enable yet - wait for next turn
-    // playBtn.disabled = false;
+  // Emit continue signal to server to start next round
+  if (typeof socket !== 'undefined' && typeof sessionToken !== 'undefined') {
+    socket.emit('continue_game', {
+      session_token: sessionToken
+    });
+  }
+}
+
+function closeRoom() {
+  // Close the room and redirect to home
+  if (typeof socket !== 'undefined' && typeof sessionToken !== 'undefined') {
+    socket.emit('close_room', {
+      session_token: sessionToken
+    });
+  }
+  
+  // Redirect to home page after short delay
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 500);
+}
+
+function restartGame() {
+  // Restart the game with same settings
+  if (typeof socket !== 'undefined' && typeof sessionToken !== 'undefined') {
+    socket.emit('restart_game', {
+      session_token: sessionToken
+    });
+  }
+  
+  // Close the summary modal
+  const overlay = document.getElementById('round-summary-overlay');
+  if (overlay) {
+    overlay.remove();
   }
 }
 
@@ -150,7 +213,7 @@ if (!document.getElementById('round-summary-styles')) {
       background: white;
       border-radius: 12px;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-      max-width: 800px;
+      max-width: 900px;
       width: 90%;
       max-height: 90vh;
       overflow-y: auto;
@@ -212,10 +275,26 @@ if (!document.getElementById('round-summary-styles')) {
       background: #f5f5f5;
       font-weight: 600;
       color: #333;
+      font-size: 13px;
     }
     
     .scoring-table tbody tr:hover {
       background: #f9f9f9;
+    }
+    
+    .scoring-table .winner-row {
+      background: #fff9e6 !important;
+      border-left: 4px solid #ffd700;
+    }
+    
+    .scoring-table .winner-row:hover {
+      background: #fff5cc !important;
+    }
+    
+    .scoring-table .total-score {
+      font-size: 18px;
+      color: #667eea;
+      font-weight: bold;
     }
     
     .scoring-table .check {
@@ -233,6 +312,30 @@ if (!document.getElementById('round-summary-styles')) {
       border-top: 1px solid #e0e0e0;
     }
     
+    .winner-message {
+      color: #ffa500;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #fff9e6;
+      border-radius: 8px;
+      border: 2px solid #ffd700;
+    }
+    
+    .continue-message {
+      color: #666;
+      font-size: 16px;
+      margin-bottom: 10px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-radius: 6px;
+    }
+    
+    .continue-message strong {
+      color: #667eea;
+    }
+    
     .auto-close-msg {
       color: #666;
       font-size: 14px;
@@ -244,20 +347,42 @@ if (!document.getElementById('round-summary-styles')) {
       color: #667eea;
     }
     
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+    .button-group {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .btn-primary, .btn-secondary {
       border: none;
       padding: 12px 30px;
       border-radius: 8px;
       font-size: 16px;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
+      font-weight: 600;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
     }
     
     .btn-primary:hover {
       transform: translateY(-2px);
       box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: #5a6268;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(108, 117, 125, 0.4);
     }
     
     @keyframes fadeIn {
