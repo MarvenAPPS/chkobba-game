@@ -175,7 +175,8 @@ socket.on('auto_played', (data) => {
 });
 
 socket.on('round_ended', (data) => {
-  console.log('Round ended:', data);
+  console.log('=== ROUND ENDED EVENT RECEIVED ===');
+  console.log('Full data:', JSON.stringify(data, null, 2));
   
   // PAUSE GAME - stop timer and disable interactions
   timerManager.stop();
@@ -190,18 +191,55 @@ socket.on('round_ended', (data) => {
   // Update scoreboard
   updateScoreboard();
   
-  // Show round summary with all data from backend including total_scores and target_score
+  // Check if showRoundSummary exists
+  console.log('Checking for showRoundSummary function...');
+  console.log('typeof showRoundSummary:', typeof showRoundSummary);
+  console.log('window.showRoundSummary:', typeof window.showRoundSummary);
+  
+  // Show round summary with all data from backend
   if (typeof showRoundSummary === 'function') {
-    showRoundSummary(
-      data.round_scores,
-      data.scoring_details,
-      data.player_names,
-      data.total_scores,
-      data.target_score || 21,
-      data.round_number
-    );
+    console.log('Calling showRoundSummary with parameters:');
+    console.log('  round_scores:', data.round_scores);
+    console.log('  scoring_details:', data.scoring_details);
+    console.log('  player_names:', data.player_names);
+    console.log('  total_scores:', data.total_scores);
+    console.log('  target_score:', data.target_score || 21);
+    console.log('  round_number:', data.round_number);
+    
+    try {
+      showRoundSummary(
+        data.round_scores,
+        data.scoring_details,
+        data.player_names,
+        data.total_scores,
+        data.target_score || 21,
+        data.round_number
+      );
+      console.log('showRoundSummary called successfully');
+    } catch (error) {
+      console.error('Error calling showRoundSummary:', error);
+      showError('Error displaying round summary: ' + error.message);
+    }
+  } else if (typeof window.showRoundSummary === 'function') {
+    console.log('Using window.showRoundSummary');
+    try {
+      window.showRoundSummary(
+        data.round_scores,
+        data.scoring_details,
+        data.player_names,
+        data.total_scores,
+        data.target_score || 21,
+        data.round_number
+      );
+      console.log('window.showRoundSummary called successfully');
+    } catch (error) {
+      console.error('Error calling window.showRoundSummary:', error);
+      showError('Error displaying round summary: ' + error.message);
+    }
   } else {
-    console.error('showRoundSummary function not found');
+    console.error('showRoundSummary function NOT FOUND!');
+    console.error('Available global functions:', Object.keys(window).filter(k => typeof window[k] === 'function').slice(0, 20));
+    showError('❌ Round summary function missing - check console');
     showInfo('🏁 Round ended!');
   }
 });

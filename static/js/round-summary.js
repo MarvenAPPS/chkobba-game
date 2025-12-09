@@ -1,9 +1,18 @@
 /**
  * Round Summary Display Component
+ * THIS MUST BE LOADED BEFORE socket-events.js
  */
 
-function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores, targetScore, roundNumber) {
-  console.log('Showing round summary:', { roundScores, scoringDetails, playerNames, totalScores, targetScore });
+// Ensure function is globally available
+window.showRoundSummary = function(roundScores, scoringDetails, playerNames, totalScores, targetScore, roundNumber) {
+  console.log('=== SHOW ROUND SUMMARY CALLED ===');
+  console.log('Parameters received:');
+  console.log('  roundScores:', roundScores);
+  console.log('  scoringDetails:', scoringDetails);
+  console.log('  playerNames:', playerNames);
+  console.log('  totalScores:', totalScores);
+  console.log('  targetScore:', targetScore);
+  console.log('  roundNumber:', roundNumber);
   
   // PAUSE GAME - stop timer and disable play button
   if (typeof timerManager !== 'undefined') {
@@ -26,6 +35,8 @@ function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores,
   const maxScore = Math.max(...Object.values(totalScores));
   const gameEnded = maxScore >= targetScore;
   const winners = gameEnded ? Object.keys(totalScores).filter(idx => totalScores[idx] === maxScore) : [];
+  
+  console.log('Game ended?', gameEnded, 'maxScore:', maxScore, 'targetScore:', targetScore);
   
   // Build table HTML
   let tableHTML = `
@@ -52,12 +63,15 @@ function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores,
   
   // Get number of players from scoring details
   const numPlayers = Object.keys(scoringDetails || {}).length;
+  console.log('Number of players:', numPlayers);
   
   for (let idx = 0; idx < numPlayers; idx++) {
     const playerName = playerNames && playerNames[idx] ? playerNames[idx] : `Player ${idx + 1}`;
     const details = scoringDetails[idx] || {};
     const roundScore = roundScores[idx] || 0;
     const totalScore = totalScores[idx] || 0;
+    
+    console.log(`Player ${idx} (${playerName}): round=${roundScore}, total=${totalScore}`);
     
     // Highlight winner(s)
     const isWinner = gameEnded && winners.includes(String(idx));
@@ -117,15 +131,25 @@ function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores,
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   
-  // NO AUTO-CLOSE TIMER - User must manually click Continue or Close
-  console.log('Round summary displayed - waiting for user action');
+  console.log('Round summary overlay added to DOM');
+  console.log('Overlay element:', overlay);
+};
+
+// Also expose without window prefix for compatibility
+function showRoundSummary(roundScores, scoringDetails, playerNames, totalScores, targetScore, roundNumber) {
+  window.showRoundSummary(roundScores, scoringDetails, playerNames, totalScores, targetScore, roundNumber);
 }
 
-function closeRoundSummary() {
+window.closeRoundSummary = function() {
+  console.log('closeRoundSummary called');
+  
   // Remove overlay
   const overlay = document.getElementById('round-summary-overlay');
   if (overlay) {
     overlay.remove();
+    console.log('Overlay removed');
+  } else {
+    console.warn('Overlay not found!');
   }
   
   // Emit continue signal to server to start next round
@@ -133,14 +157,25 @@ function closeRoundSummary() {
     socket.emit('continue_game', {
       session_token: sessionToken
     });
+  } else if (typeof socket !== 'undefined' && typeof gameState !== 'undefined' && gameState.session_token) {
+    socket.emit('continue_game', {
+      session_token: gameState.session_token
+    });
+    console.log('Emitted continue_game event');
   }
+};
+
+function closeRoundSummary() {
+  window.closeRoundSummary();
 }
 
-function closeRoom() {
+window.closeRoom = function() {
+  console.log('closeRoom called');
+  
   // Close the room and redirect to home
-  if (typeof socket !== 'undefined' && typeof sessionToken !== 'undefined') {
+  if (typeof socket !== 'undefined' && typeof gameState !== 'undefined' && gameState.session_token) {
     socket.emit('close_room', {
-      session_token: sessionToken
+      session_token: gameState.session_token
     });
   }
   
@@ -148,13 +183,19 @@ function closeRoom() {
   setTimeout(() => {
     window.location.href = '/';
   }, 500);
+};
+
+function closeRoom() {
+  window.closeRoom();
 }
 
-function restartGame() {
+window.restartGame = function() {
+  console.log('restartGame called');
+  
   // Restart the game with same settings
-  if (typeof socket !== 'undefined' && typeof sessionToken !== 'undefined') {
+  if (typeof socket !== 'undefined' && typeof gameState !== 'undefined' && gameState.session_token) {
     socket.emit('restart_game', {
-      session_token: sessionToken
+      session_token: gameState.session_token
     });
   }
   
@@ -163,7 +204,14 @@ function restartGame() {
   if (overlay) {
     overlay.remove();
   }
+};
+
+function restartGame() {
+  window.restartGame();
 }
+
+// Log that this script has loaded
+console.log('round-summary.js loaded - showRoundSummary is available:', typeof window.showRoundSummary);
 
 // Add CSS styles dynamically
 if (!document.getElementById('round-summary-styles')) {
@@ -366,4 +414,5 @@ if (!document.getElementById('round-summary-styles')) {
     }
   `;
   document.head.appendChild(style);
+  console.log('Round summary styles injected');
 }
